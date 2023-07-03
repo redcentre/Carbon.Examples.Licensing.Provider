@@ -1,7 +1,9 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
 using System.Reflection;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
 using RCS.Carbon.Licensing.Example.EFCore;
@@ -22,7 +24,7 @@ public class ExampleLicensingProvider : LicensingProviderBase
 
 	public ExampleLicensingProvider(string adoConnectionString)
 	{
-		_connect = adoConnectionString;
+		_connect = adoConnectionString ?? throw new ArgumentNullException(nameof(adoConnectionString));
 	}
 
 	protected override string GetDescriptionCore()
@@ -34,7 +36,14 @@ public class ExampleLicensingProvider : LicensingProviderBase
 		return $"{t.Name} {an.Version} - {desc}";
 	}
 
-	ExampleContext MakeContext() => new(_connect);
+	protected override IDictionary<string, string> GetConfigValuesCore()
+	{
+		string safeconn = Regex.Replace(_connect!, @"(password)=([^;]+)", s => $"{s.Groups[1].Value}={Redact(s.Groups[2].Value)}", RegexOptions.IgnoreCase);
+		return new Dictionary<string, string>()
+		{
+			{ "AdoConnectionString", safeconn }
+		};
+	}
 
 	protected override async Task<LicenceFull> GetFreeLicenceCore(string? clientIdentifier = null, bool skipCache = false)
 	{
@@ -175,4 +184,8 @@ public class ExampleLicensingProvider : LicensingProviderBase
 			}).ToArray()
 		};
 	}
+
+	ExampleContext MakeContext() => new(_connect);
+
+	static string Redact(string value) => new string('*', value.Length - 1) + value.Last();
 }
