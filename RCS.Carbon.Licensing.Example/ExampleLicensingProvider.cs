@@ -36,12 +36,12 @@ public class ExampleLicensingProvider : LicensingProviderBase
 		return $"{t.Name} {an.Version} - {desc}";
 	}
 
-	protected override IDictionary<string, string> GetConfigValuesCore()
+	protected override string[][] GetConfigValuesCore()
 	{
 		string safeconn = Regex.Replace(_connect!, @"(password)=([^;]+)", s => $"{s.Groups[1].Value}={Redact(s.Groups[2].Value)}", RegexOptions.IgnoreCase);
-		return new Dictionary<string, string>()
+		return new string[][]
 		{
-			{ "AdoConnectionString", safeconn }
+			new string[] { "AdoConnectionString", safeconn }
 		};
 	}
 
