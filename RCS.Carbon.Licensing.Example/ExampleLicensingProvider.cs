@@ -1,10 +1,12 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Reflection;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using System.Xml.Linq;
+using Azure.Storage.Blobs;
 using Microsoft.EntityFrameworkCore;
 using RCS.Carbon.Licensing.Example.EFCore;
 using RCS.Carbon.Licensing.Shared;
@@ -18,7 +20,7 @@ namespace RCS.Carbon.Licensing.Example;
 /// An example of a simple Carbon licensing provider. This provider uses a SQL Server database as the backing
 /// storage for licensing information about Users, Jobs and Customers.
 /// </summary>
-public class ExampleLicensingProvider : LicensingProviderBase
+public class ExampleLicensingProvider : ILicensingProvider
 {
 	readonly string? _connect;
 	const string GuestAccountName = "guest";
@@ -28,9 +30,13 @@ public class ExampleLicensingProvider : LicensingProviderBase
 		_connect = adoConnectionString ?? throw new ArgumentNullException(nameof(adoConnectionString));
 	}
 
-	public override string Name => "Example Licensing Provider";
+	public void Dispose()
+	{
+	}
 
-	public override string Description
+	public string Name => "Example Licensing Provider";
+
+	public string Description
 	{
 		get
 		{
@@ -42,7 +48,7 @@ public class ExampleLicensingProvider : LicensingProviderBase
 		}
 	}
 
-	public override string[][] ConfigValues
+	public string[][] ConfigValues
 	{
 		get
 		{
@@ -54,7 +60,9 @@ public class ExampleLicensingProvider : LicensingProviderBase
 		}
 	}
 
-	public override async Task<LicenceFull> LoginId(string userId, string? password, bool skipCache = false)
+	#region Authentication
+
+	public async Task<LicenceFull> LoginId(string userId, string? password, bool skipCache = false)
 	{
 		using var context = MakeContext();
 		long id = long.Parse(userId);
@@ -69,7 +77,7 @@ public class ExampleLicensingProvider : LicensingProviderBase
 		return UserToFull(user);
 	}
 
-	public override async Task<LicenceFull> LoginName(string userName, string? password, bool skipCache = false)
+	public async Task<LicenceFull> LoginName(string userName, string? password, bool skipCache = false)
 	{
 		string upname = userName.ToUpper();
 		using var context = MakeContext();
@@ -84,7 +92,7 @@ public class ExampleLicensingProvider : LicensingProviderBase
 		return UserToFull(user);
 	}
 
-	public override async Task<LicenceFull> GetFreeLicence(string? clientIdentifier = null, bool skipCache = false)
+	public async Task<LicenceFull> GetFreeLicence(string? clientIdentifier = null, bool skipCache = false)
 	{
 		using var context = MakeContext();
 		var user = await context.Users.AsNoTracking()
@@ -96,19 +104,19 @@ public class ExampleLicensingProvider : LicensingProviderBase
 			: UserToFull(user);
 	}
 
-	public override async Task<int> LogoutId(string userId)
+	public async Task<int> LogoutId(string userId)
 	{
 		// TODO Add an explanation of what LogoutId might really do.
 		return await Task.FromResult<int>(-1);
 	}
 
-	public override async Task<int> ReturnId(string userId)
+	public async Task<int> ReturnId(string userId)
 	{
 		// TODO Add an explanation of what ReturnId might really do.
 		return await Task.FromResult<int>(-1);
 	}
 
-	public override async Task<int> ChangePassword(string userId, string? oldPassword, string newPassword)
+	public async Task<int> ChangePassword(string userId, string? oldPassword, string newPassword)
 	{
 		using var context = MakeContext();
 		long id = long.Parse(userId);
@@ -121,7 +129,7 @@ public class ExampleLicensingProvider : LicensingProviderBase
 		return await context.SaveChangesAsync().ConfigureAwait(false);
 	}
 
-	public override async Task<int> UpdateAccount(string userId, string userName, string? comment, string? email)
+	public async Task<int> UpdateAccount(string userId, string userName, string? comment, string? email)
 	{
 		using var context = MakeContext();
 		long id = long.Parse(userId);
@@ -132,7 +140,11 @@ public class ExampleLicensingProvider : LicensingProviderBase
 		return await context.SaveChangesAsync().ConfigureAwait(false);
 	}
 
-	public override async Task<Shared.Entities.NavData> GetNavigationData()
+	#endregion
+
+	#region Navigation
+
+	public async Task<Shared.Entities.NavData> GetNavigationData()
 	{
 		using var context = MakeContext();
 		var custs = await context.Customers.AsNoTracking()
@@ -184,7 +196,7 @@ public class ExampleLicensingProvider : LicensingProviderBase
 		};
 	}
 
-	public override async Task<string> GetNavigationXml()
+	public async Task<string> GetNavigationXml()
 	{
 		using var context = MakeContext();
 		var elem = new XElement("Navigation");
@@ -217,24 +229,31 @@ public class ExampleLicensingProvider : LicensingProviderBase
 		return elem.ToString();
 	}
 
-	public override async Task<Shared.Entities.Customer?> ReadCustomer(string id)
+	#endregion
+
+	#region Customer
+
+	public async Task<Shared.Entities.Customer?> ReadCustomer(string id)
 	{
 		using var context = MakeContext();
-		var cust = await context.Customers.AsNoTracking().FirstOrDefaultAsync(c => c.Id.ToString() == id);
-		return cust == null ? null : ToCustomer(cust);
+		var cust = await context.Customers.AsNoTracking()
+			.Include(c => c.Users)
+			.Include(c => c.Jobs)
+			.FirstOrDefaultAsync(c => c.Id.ToString() == id);
+		return cust == null ? null : ToCustomer(cust, true);
 	}
 
-	public override async Task<Shared.Entities.Customer[]> ListCustomers()
+	public async Task<Shared.Entities.Customer[]> ListCustomers()
 	{
 		using var context = MakeContext();
-		return await context.Customers.Include(c => c.Jobs)
+		return await context.Customers.AsNoTracking()
 			.AsAsyncEnumerable()
-			.Select(c => ToCustomer(c))
+			.Select(c => ToCustomer(c, false))
 			.ToArrayAsync()
 			.ConfigureAwait(false);
 	}
 
-	public override async Task<Shared.Entities.Customer> UpdateCustomer(Shared.Entities.Customer customer)
+	public async Task<Shared.Entities.Customer> UpdateCustomer(Shared.Entities.Customer customer)
 	{
 		using var context = MakeContext();
 		Customer row;
@@ -271,14 +290,45 @@ public class ExampleLicensingProvider : LicensingProviderBase
 		row.SignInNote = customer.SignInNote;
 		row.Spent = customer.Spent;
 		await context.SaveChangesAsync().ConfigureAwait(false);
-		return ToCustomer(row);
+		row = await context.Customers.AsNoTracking()
+			.Include(c => c.Users)
+			.Include(c => c.Jobs)
+			.FirstAsync(c => c.Id.ToString() == customer.Id);
+		return ToCustomer(row, true);
 	}
 
-	public override bool CanCreateCustomer => true;
+	public async Task<string[]> ValidateCustomer(string customerId)
+	{
+		using var context = MakeContext();
+		var cust = await context.Customers.AsNoTracking().FirstOrDefaultAsync(c => c.Id.ToString() == customerId);
+		var list = new List<string>();
+		if (cust == null)
+		{
+			list.Add($"Customer Id {customerId} is not in the licensing database.");
+		}
+		else
+		{
+			try
+			{
+				var client = new BlobServiceClient(cust.StorageKey);
+				var acc = await client.GetAccountInfoAsync();
+				Trace.WriteLine($"Probe customer '{cust.Name}' storage account: {acc.Value.AccountKind}");
+			}
+			catch (Exception ex)
+			{
+				// The exception message can be really verbose with lots of lines.
+				string first = ex.Message.Split("\r\n".ToCharArray(), StringSplitOptions.RemoveEmptyEntries).First();
+				list.Add(first);
+			}
+		}
+		return list.ToArray();
+	}
 
-	public override bool CanDeleteCustomer => true;
+	public bool CanCreateCustomer => true;
 
-	public override async Task<int> DeleteCustomer(string id)
+	public bool CanDeleteCustomer => true;
+
+	public async Task<int> DeleteCustomer(string id)
 	{
 		using var context = MakeContext();
 		var cust = await context.Customers
@@ -299,24 +349,57 @@ public class ExampleLicensingProvider : LicensingProviderBase
 		return await context.SaveChangesAsync().ConfigureAwait(false);
 	}
 
-	public override async Task<Shared.Entities.Job?> ReadJob(string id)
+	public async Task<int> DisconnectCustomerChildJob(string customerId, string jobId)
 	{
 		using var context = MakeContext();
-		var job = await context.Jobs.AsNoTracking().FirstOrDefaultAsync(j => j.Id.ToString() == id);
-		return job == null ? null : ToJob(job);
+		var cust = await context.Customers
+			.Include(c => c.Jobs)
+			.FirstOrDefaultAsync();
+		if (cust == null) return 0;
+		var job = cust.Jobs.FirstOrDefault(j => j.Id.ToString() == jobId);
+		if (job == null) return 0;
+		cust.Jobs.Remove(job);
+		return await context.SaveChangesAsync();
 	}
 
-	public override async Task<Shared.Entities.Job[]> ListJobs()
+	public async Task<int> DisconnectCustomerChildUser(string customerId, string userId)
 	{
 		using var context = MakeContext();
-		return await context.Jobs
+		var cust = await context.Customers
+			.Include(c => c.Users)
+			.FirstOrDefaultAsync();
+		if (cust == null) return 0;
+		var user = cust.Users.FirstOrDefault(j => j.Id.ToString() == userId);
+		if (user == null) return 0;
+		cust.Users.Remove(user);
+		return await context.SaveChangesAsync();
+	}
+
+	#endregion
+
+	#region Job
+
+	public async Task<Shared.Entities.Job?> ReadJob(string id)
+	{
+		using var context = MakeContext();
+		var job = await context.Jobs.AsNoTracking()
+			.Include(j => j.Customer)
+			.Include(j => j.Users)
+			.FirstOrDefaultAsync(j => j.Id.ToString() == id);
+		return job == null ? null : ToJob(job, true);
+	}
+
+	public async Task<Shared.Entities.Job[]> ListJobs()
+	{
+		using var context = MakeContext();
+		return await context.Jobs.AsNoTracking()
 			.AsAsyncEnumerable()
-			.Select(j => ToJob(j))
+			.Select(j => ToJob(j, true))
 			.ToArrayAsync()
 			.ConfigureAwait(false);
 	}
 
-	public override async Task<Shared.Entities.Job> UpdateJob(Shared.Entities.Job job)
+	public async Task<Shared.Entities.Job> UpdateJob(Shared.Entities.Job job)
 	{
 		using var context = MakeContext();
 		Job row;
@@ -350,14 +433,53 @@ public class ExampleLicensingProvider : LicensingProviderBase
 		row.VartreeNames = job.VartreeNames?.Length > 0 ? string.Join(",", job.VartreeNames) : null;
 		row.LastUpdate = DateTime.UtcNow;
 		await context.SaveChangesAsync().ConfigureAwait(false);
-		return ToJob(row);
+		row = await context.Jobs.AsNoTracking()
+			.Include(j => j.Customer)
+			.Include(j => j.Users)
+			.FirstAsync(j => j.Id.ToString() == job.Id);
+		return ToJob(row, true);
 	}
 
-	public override bool CanCreateJob => true;
+	public async Task<string[]> ValidateJob(string jobId)
+	{
+		using var context = MakeContext();
+		var job = await context.Jobs.AsNoTracking().Include(j => j.Customer).FirstOrDefaultAsync(j => j.Id.ToString() == jobId);
+		var list = new List<string>();
+		if (job == null)
+		{
+			list.Add($"Job Id {jobId} is not in the licensing database.");
+		}
+		else
+		{
+			if (job.Customer == null)
+			{
+				list.Add($"Job Id {jobId} '{job.Name}' does not have a parent customer.");
+			}
+			else
+			{
+				try
+				{
+					var client = new BlobServiceClient(job.Customer.StorageKey);
+					var cc = client.GetBlobContainerClient(job.Name);
+					var props = await cc.GetPropertiesAsync();
+					Trace.WriteLine($"Probe job '{job.Name}' customer '{job.Customer.Name}' container: {props.Value.ETag}");
+				}
+				catch (Exception ex)
+				{
+					// The exception message can be really verbose with lots of lines.
+					string first = ex.Message.Split("\r\n".ToCharArray(), StringSplitOptions.RemoveEmptyEntries).First();
+					list.Add(first);
+				}
+			}
+		}
+		return list.ToArray();
+	}
 
-	public override bool CanDeleteJob => true;
+	public bool CanCreateJob => true;
 
-	public override async Task<int> DeleteJob(string id)
+	public bool CanDeleteJob => true;
+
+	public async Task<int> DeleteJob(string id)
 	{
 		using var context = MakeContext();
 		var job = await context.Jobs
@@ -371,6 +493,142 @@ public class ExampleLicensingProvider : LicensingProviderBase
 		context.Jobs.Remove(job);
 		return await context.SaveChangesAsync().ConfigureAwait(false);
 	}
+
+	public async Task<int> DisconnectJobChildUser(string jobId, string userId)
+	{
+		using var context = MakeContext();
+		var job = await context.Jobs
+			.Include(c => c.Users)
+			.FirstOrDefaultAsync();
+		if (job == null) return 0;
+		var user = job.Users.FirstOrDefault(u => u.Id.ToString() == userId);
+		if (user == null) return 0;
+		job.Users.Remove(user);
+		return await context.SaveChangesAsync();
+	}
+
+	#endregion
+
+	#region User
+
+	public async Task<Shared.Entities.User?> ReadUser(string id)
+	{
+		using var context = MakeContext();
+		var user = await context.Users.AsNoTracking()
+			.Include(u => u.Customers)
+			.Include(u => u.Jobs)
+			.FirstOrDefaultAsync(u => u.Id.ToString() == id);
+		return user == null ? null : ToUser(user, true);
+	}
+
+	public async Task<Shared.Entities.User[]> ListUsers()
+	{
+		using var context = MakeContext();
+		return await context.Users.AsNoTracking()
+			.AsAsyncEnumerable()
+			.Select(u => ToUser(u, false))
+			.ToArrayAsync()
+			.ConfigureAwait(false);
+	}
+
+	public async Task<Shared.Entities.User> UpdateUser(Shared.Entities.User user)
+	{
+		using var context = MakeContext();
+		User row;
+		if (user.Id == null)
+		{
+			row = new User
+			{
+				Id = Random.Shared.Next(10_000_000, 20_000_000),
+				Created = DateTime.UtcNow
+			};
+			context.Users.Add(row);
+		}
+		else
+		{
+			row = await context.Users.FirstOrDefaultAsync(u => u.Id.ToString() == user.Id) ?? throw new CarbonException(700, $"User Id {user.Id} not found for update");
+		}
+		row.Name = user.Name;
+		row.ProviderId = user.ProviderId;
+		row.Psw = user.Psw;
+		row.PassHash = user.PassHash;
+		row.Email = user.Email;
+		row.EntityId = user.EntityId;
+		row.CloudCustomerNames = user.CloudCustomerNames.Length > 0 ? string.Join(" ", user.CloudCustomerNames) : null;
+		row.JobNames = user.JobNames.Length > 0 ? string.Join(" ", user.JobNames) : null;
+		row.VartreeNames = user.VartreeNames.Length > 0 ? string.Join(" ", user.VartreeNames) : null;
+		row.DashboardNames = user.DashboardNames.Length > 0 ? string.Join(" ", user.DashboardNames) : null;
+		row.DataLocation = (int?)user.DataLocation;
+		row.Sequence = user.Sequence;
+		row.Uid = user.Uid;
+		row.Comment = user.Comment;
+		row.Roles = user.Roles.Length > 0 ? string.Join(" ", user.Roles) : null;
+		row.Filter = user.Filter;
+		row.LoginMacs = user.LoginMacs;
+		row.LoginCount = user.LoginCount;
+		row.LoginMax = user.LoginMax;
+		row.LastLogin = user.LastLogin;
+		row.Sunset = user.Sunset;
+		row.Version = user.Version;
+		row.MinVersion = user.MinVersion;
+		row.IsDisabled = user.IsDisabled;
+		await context.SaveChangesAsync().ConfigureAwait(false);
+		row = await context.Users.AsNoTracking()
+			.Include(u => u.Customers)
+			.Include(u => u.Jobs)
+			.FirstAsync(u => u.Id.ToString() == user.Id);
+		return ToUser(row, true);
+	}
+
+	public async Task<int> DeleteUser(string id)
+	{
+		using var context = MakeContext();
+		var user = await context.Users
+			.Include(u => u.Customers)
+			.Include(u => u.Jobs)
+			.FirstOrDefaultAsync(u => u.Id.ToString() == id);
+		if (user == null) return 0;
+		foreach (var job in user.Jobs.ToArray())
+		{
+			user.Jobs.Remove(job);
+		}
+		foreach (var cust in user.Customers.ToArray())
+		{
+			user.Customers.Remove(cust);
+		}
+		context.Users.Remove(user);
+		return await context.SaveChangesAsync().ConfigureAwait(false);
+	}
+
+	public async Task<int> DisconnectUserChildCustomer(string userId, string customerId)
+	{
+		using var context = MakeContext();
+		var user = await context.Users
+			.Include(c => c.Customers)
+			.FirstOrDefaultAsync();
+		if (user == null) return 0;
+		var cust = user.Customers.FirstOrDefault(c => c.Id.ToString() == customerId);
+		if (cust == null) return 0;
+		user.Customers.Remove(cust);
+		return await context.SaveChangesAsync();
+	}
+
+	public async Task<int> DisconnectUserChildJob(string userId, string jobId)
+	{
+		using var context = MakeContext();
+		var user = await context.Users
+			.Include(c => c.Jobs)
+			.FirstOrDefaultAsync();
+		if (user == null) return 0;
+		var cust = user.Jobs.FirstOrDefault(j => j.Id.ToString() == jobId);
+		if (cust == null) return 0;
+		user.Jobs.Remove(cust);
+		return await context.SaveChangesAsync();
+	}
+
+	#endregion
+
+	#region Row To Entities
 
 	/// <summary>
 	/// A deep loaded User from the example database is converted into a Carbon full licence.
@@ -428,7 +686,7 @@ public class ExampleLicensingProvider : LicensingProviderBase
 		};
 	}
 
-	static Shared.Entities.Customer ToCustomer(Customer cust) => new()
+	static Shared.Entities.Customer ToCustomer(Customer cust, bool includeChildren) => new()
 	{
 		Id = cust.Id.ToString(),
 		Name = cust.Name,
@@ -449,10 +707,11 @@ public class ExampleLicensingProvider : LicensingProviderBase
 		SignInLogo = cust.SignInLogo,
 		SignInNote = cust.SignInNote,
 		Spent = cust.Spent,
-		Jobs = cust.Jobs?.Select(j => ToJob(j)).ToArray()
+		Jobs = cust.Jobs?.Select(j => ToJob(j, false)).ToArray(),
+		Users = cust.Users?.Select(u => ToUser(u, false)).ToArray()
 	};
 
-	static Shared.Entities.Job ToJob(Job job) => new()
+	static Shared.Entities.Job ToJob(Job job, bool includeChildren) => new()
 	{
 		Id = job.Id.ToString(),
 		Name = job.Name,
@@ -470,8 +729,43 @@ public class ExampleLicensingProvider : LicensingProviderBase
 		Sequence = job.Sequence,
 		Url = job.Url,
 		CustomerId = job.CustomerId.ToString(),
-		VartreeNames = job.VartreeNames?.Split(',') ?? Array.Empty<string>()
+		VartreeNames = job.VartreeNames?.Split(',') ?? Array.Empty<string>(),
+		Users = includeChildren ? job.Users?.Select(u => ToUser(u, false)).ToArray() : null,
+		Customer = includeChildren ? job.Customer == null ? null : ToCustomer(job.Customer, false) : null
 	};
+
+	static Shared.Entities.User ToUser(User user, bool includeChildren) => new()
+	{
+		Id = user.Id.ToString(),
+		Name = user.Name,
+		ProviderId = user.ProviderId,
+		Psw = user.Psw,
+		PassHash = user.PassHash,
+		Email = user.Email,
+		EntityId = user.EntityId,
+		CloudCustomerNames = user.CloudCustomerNames?.Split(",; ".ToCharArray(), StringSplitOptions.RemoveEmptyEntries) ?? Array.Empty<string>(),
+		JobNames = user.JobNames?.Split(",; ".ToCharArray(), StringSplitOptions.RemoveEmptyEntries) ?? Array.Empty<string>(),
+		VartreeNames = user.VartreeNames?.Split(",; ".ToCharArray(), StringSplitOptions.RemoveEmptyEntries) ?? Array.Empty<string>(),
+		DashboardNames = user.DashboardNames?.Split(",; ".ToCharArray(), StringSplitOptions.RemoveEmptyEntries) ?? Array.Empty<string>(),
+		DataLocation = (Shared.Entities.DataLocationType?)user.DataLocation,
+		Sequence = user.Sequence,
+		Uid = user.Uid,
+		Comment = user.Comment,
+		Roles = user.Roles?.Split(",; ".ToCharArray(), StringSplitOptions.RemoveEmptyEntries) ?? Array.Empty<string>(),
+		Filter = user.Filter,
+		LoginMacs = user.LoginMacs,
+		LoginCount = user.LoginCount,
+		LoginMax = user.LoginMax,
+		LastLogin = user.LastLogin,
+		Sunset = user.Sunset,
+		Version = user.Version,
+		MinVersion = user.MinVersion,
+		IsDisabled = user.IsDisabled,
+		Customers = includeChildren ? user.Customers?.Select(c => ToCustomer(c, false)).ToArray() : null,
+		Jobs = includeChildren ? user.Jobs?.Select(j => ToJob(j, false)).ToArray() : null
+	};
+
+	#endregion
 
 	ExampleContext MakeContext() => new(_connect);
 
