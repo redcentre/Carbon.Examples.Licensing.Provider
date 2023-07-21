@@ -1,9 +1,10 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.ComponentModel;
+using System.ComponentModel.DataAnnotations;
 using System.Diagnostics;
 using System.Linq;
 using System.Reflection;
-using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using System.Xml.Linq;
 using Azure.Storage.Blobs;
@@ -25,7 +26,11 @@ public class ExampleLicensingProvider : ILicensingProvider
 	readonly string? _connect;
 	const string GuestAccountName = "guest";
 
-	public ExampleLicensingProvider(string adoConnectionString)
+	public ExampleLicensingProvider(
+		[Required]
+		[Description("The ADO connection string to the licensing database.")]
+		string adoConnectionString
+	)
 	{
 		_connect = adoConnectionString ?? throw new ArgumentNullException(nameof(adoConnectionString));
 	}
@@ -45,18 +50,6 @@ public class ExampleLicensingProvider : ILicensingProvider
 			var an = asm.GetName();
 			var desc = asm.GetCustomAttribute<AssemblyDescriptionAttribute>()!.Description;
 			return $"{t.Name} {an.Version} - {desc}";
-		}
-	}
-
-	public string[][] ConfigValues
-	{
-		get
-		{
-			string safeconn = Regex.Replace(_connect!, @"(password)=([^;]+)", s => $"{s.Groups[1].Value}={Redact(s.Groups[2].Value)}", RegexOptions.IgnoreCase);
-			return new string[][]
-			{
-			new string[] { "AdoConnectionString", safeconn }
-			};
 		}
 	}
 
@@ -106,14 +99,12 @@ public class ExampleLicensingProvider : ILicensingProvider
 
 	public async Task<int> LogoutId(string userId)
 	{
-		// TODO Add an explanation of what LogoutId might really do.
-		return await Task.FromResult<int>(-1);
+		return await Task.FromResult(-1);
 	}
 
 	public async Task<int> ReturnId(string userId)
 	{
-		// TODO Add an explanation of what ReturnId might really do.
-		return await Task.FromResult<int>(-1);
+		return await Task.FromResult(-1);
 	}
 
 	public async Task<int> ChangePassword(string userId, string? oldPassword, string newPassword)
@@ -183,6 +174,7 @@ public class ExampleLicensingProvider : ILicensingProvider
 			{
 				Id = u.Id.ToString(),
 				Name = u.Name,
+				Email = u.Email,
 				IsDisabled = u.IsDisabled,
 				CustomerIds = u.Customers.Select(c => c.Id.ToString()).ToArray(),
 				JobIds = u.Jobs.Select(j => j.Id.ToString()).ToArray()
@@ -293,7 +285,7 @@ public class ExampleLicensingProvider : ILicensingProvider
 		row = await context.Customers.AsNoTracking()
 			.Include(c => c.Users)
 			.Include(c => c.Jobs)
-			.FirstAsync(c => c.Id.ToString() == customer.Id);
+			.FirstAsync(c => c.Id == row.Id);
 		return ToCustomer(row, true);
 	}
 
@@ -324,17 +316,13 @@ public class ExampleLicensingProvider : ILicensingProvider
 		return list.ToArray();
 	}
 
-	public bool CanCreateCustomer => true;
-
-	public bool CanDeleteCustomer => true;
-
 	public async Task<int> DeleteCustomer(string id)
 	{
 		using var context = MakeContext();
 		var cust = await context.Customers
 			.Include(c => c.Jobs)
 			.Include(c => c.Users)
-			.FirstOrDefaultAsync(c => c.Id.ToString() == id);
+			.FirstOrDefaultAsync(c => c.Id == int.Parse(id));
 		if (cust == null) return 0;
 		foreach (var job in cust.Jobs.ToArray())
 		{
@@ -354,11 +342,27 @@ public class ExampleLicensingProvider : ILicensingProvider
 		using var context = MakeContext();
 		var cust = await context.Customers
 			.Include(c => c.Jobs)
-			.FirstOrDefaultAsync();
+			.FirstOrDefaultAsync(c => c.Id.ToString() == customerId);
 		if (cust == null) return 0;
 		var job = cust.Jobs.FirstOrDefault(j => j.Id.ToString() == jobId);
 		if (job == null) return 0;
+		job.CustomerId = null;
 		cust.Jobs.Remove(job);
+		return await context.SaveChangesAsync();
+	}
+
+	public async Task<int> ConnectCustomerChildJobs(string customerId, string[] jobIds)
+	{
+		using var context = MakeContext();
+		var cust = await context.Customers
+			.Include(c => c.Jobs)
+			.FirstOrDefaultAsync(c => c.Id.ToString() == customerId);
+		if (cust == null) return 0;
+		var addjobs = context.Jobs.Where(j => jobIds.Contains(j.Id.ToString())).ToArray();
+		foreach (var addjob in addjobs)
+		{
+			cust.Jobs.Add(addjob);
+		}
 		return await context.SaveChangesAsync();
 	}
 
@@ -367,11 +371,26 @@ public class ExampleLicensingProvider : ILicensingProvider
 		using var context = MakeContext();
 		var cust = await context.Customers
 			.Include(c => c.Users)
-			.FirstOrDefaultAsync();
+			.FirstOrDefaultAsync(c => c.Id.ToString() == customerId);
 		if (cust == null) return 0;
 		var user = cust.Users.FirstOrDefault(j => j.Id.ToString() == userId);
 		if (user == null) return 0;
 		cust.Users.Remove(user);
+		return await context.SaveChangesAsync();
+	}
+
+	public async Task<int> ConnectCustomerChildUsers(string customerId, string[] userIds)
+	{
+		using var context = MakeContext();
+		var cust = await context.Customers
+			.Include(c => c.Users)
+			.FirstOrDefaultAsync(c => c.Id.ToString() == customerId);
+		if (cust == null) return 0;
+		var addusers = context.Users.Where(u => userIds.Contains(u.Id.ToString())).ToArray();
+		foreach (var adduser in addusers)
+		{
+			cust.Users.Add(adduser);
+		}
 		return await context.SaveChangesAsync();
 	}
 
@@ -436,7 +455,7 @@ public class ExampleLicensingProvider : ILicensingProvider
 		row = await context.Jobs.AsNoTracking()
 			.Include(j => j.Customer)
 			.Include(j => j.Users)
-			.FirstAsync(j => j.Id.ToString() == job.Id);
+			.FirstAsync(j => j.Id == row.Id);
 		return ToJob(row, true);
 	}
 
@@ -475,16 +494,12 @@ public class ExampleLicensingProvider : ILicensingProvider
 		return list.ToArray();
 	}
 
-	public bool CanCreateJob => true;
-
-	public bool CanDeleteJob => true;
-
 	public async Task<int> DeleteJob(string id)
 	{
 		using var context = MakeContext();
 		var job = await context.Jobs
 			.Include(j => j.Users)
-			.FirstOrDefaultAsync(j => j.Id.ToString(id) == id);
+			.FirstOrDefaultAsync(j => j.Id == int.Parse(id));
 		if (job == null) return 0;
 		foreach (var user in job.Users.ToArray())
 		{
@@ -499,11 +514,26 @@ public class ExampleLicensingProvider : ILicensingProvider
 		using var context = MakeContext();
 		var job = await context.Jobs
 			.Include(c => c.Users)
-			.FirstOrDefaultAsync();
+			.FirstOrDefaultAsync(j => j.Id.ToString() == jobId);
 		if (job == null) return 0;
 		var user = job.Users.FirstOrDefault(u => u.Id.ToString() == userId);
 		if (user == null) return 0;
 		job.Users.Remove(user);
+		return await context.SaveChangesAsync();
+	}
+
+	public async Task<int> ConnectJobChildUsers(string jobId, string[] userIds)
+	{
+		using var context = MakeContext();
+		var job = await context.Jobs
+			.Include(j => j.Users)
+			.FirstOrDefaultAsync(j => j.Id.ToString() == jobId);
+		if (job == null) return 0;
+		var addusers = context.Users.Where(j => userIds.Contains(j.Id.ToString())).ToArray();
+		foreach (var adduser in addusers)
+		{
+			job.Users.Add(adduser);
+		}
 		return await context.SaveChangesAsync();
 	}
 
@@ -576,7 +606,7 @@ public class ExampleLicensingProvider : ILicensingProvider
 		row = await context.Users.AsNoTracking()
 			.Include(u => u.Customers)
 			.Include(u => u.Jobs)
-			.FirstAsync(u => u.Id.ToString() == user.Id);
+			.FirstAsync(u => u.Id == row.Id);
 		return ToUser(row, true);
 	}
 
@@ -586,7 +616,7 @@ public class ExampleLicensingProvider : ILicensingProvider
 		var user = await context.Users
 			.Include(u => u.Customers)
 			.Include(u => u.Jobs)
-			.FirstOrDefaultAsync(u => u.Id.ToString() == id);
+			.FirstOrDefaultAsync(u => u.Id == int.Parse(id));
 		if (user == null) return 0;
 		foreach (var job in user.Jobs.ToArray())
 		{
@@ -605,11 +635,26 @@ public class ExampleLicensingProvider : ILicensingProvider
 		using var context = MakeContext();
 		var user = await context.Users
 			.Include(c => c.Customers)
-			.FirstOrDefaultAsync();
+			.FirstOrDefaultAsync(u => u.Id.ToString() == userId);
 		if (user == null) return 0;
 		var cust = user.Customers.FirstOrDefault(c => c.Id.ToString() == customerId);
 		if (cust == null) return 0;
 		user.Customers.Remove(cust);
+		return await context.SaveChangesAsync();
+	}
+
+	public async Task<int> ConnectUserChildCustomers(string userId, string[] customerIds)
+	{
+		using var context = MakeContext();
+		var user = await context.Users
+			.Include(u => u.Customers)
+			.FirstOrDefaultAsync(u => u.Id.ToString() == userId);
+		if (user == null) return 0;
+		var addcusts = context.Customers.Where(c => customerIds.Contains(c.Id.ToString())).ToArray();
+		foreach (var addcust in addcusts)
+		{
+			user.Customers.Add(addcust);
+		}
 		return await context.SaveChangesAsync();
 	}
 
@@ -618,11 +663,26 @@ public class ExampleLicensingProvider : ILicensingProvider
 		using var context = MakeContext();
 		var user = await context.Users
 			.Include(c => c.Jobs)
-			.FirstOrDefaultAsync();
+			.FirstOrDefaultAsync(u => u.Id.ToString() == userId);
 		if (user == null) return 0;
 		var cust = user.Jobs.FirstOrDefault(j => j.Id.ToString() == jobId);
 		if (cust == null) return 0;
 		user.Jobs.Remove(cust);
+		return await context.SaveChangesAsync();
+	}
+
+	public async Task<int> ConnectUserChildJobs(string userId, string[] jobIds)
+	{
+		using var context = MakeContext();
+		var user = await context.Users
+			.Include(u => u.Jobs)
+			.FirstOrDefaultAsync(u => u.Id.ToString() == userId);
+		if (user == null) return 0;
+		var addjobs = context.Jobs.Where(j => jobIds.Contains(j.Id.ToString())).ToArray();
+		foreach (var addjob in addjobs)
+		{
+			user.Jobs.Add(addjob);
+		}
 		return await context.SaveChangesAsync();
 	}
 
@@ -707,8 +767,8 @@ public class ExampleLicensingProvider : ILicensingProvider
 		SignInLogo = cust.SignInLogo,
 		SignInNote = cust.SignInNote,
 		Spent = cust.Spent,
-		Jobs = cust.Jobs?.Select(j => ToJob(j, false)).ToArray(),
-		Users = cust.Users?.Select(u => ToUser(u, false)).ToArray()
+		Jobs = includeChildren ? cust.Jobs?.Select(j => ToJob(j, false)).ToArray() : null,
+		Users = includeChildren ? cust.Users?.Select(u => ToUser(u, false)).ToArray() : null
 	};
 
 	static Shared.Entities.Job ToJob(Job job, bool includeChildren) => new()
