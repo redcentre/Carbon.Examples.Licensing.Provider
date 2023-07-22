@@ -228,21 +228,14 @@ public class ExampleLicensingProvider : ILicensingProvider
 	public async Task<Shared.Entities.Customer?> ReadCustomer(string id)
 	{
 		using var context = MakeContext();
-		var cust = await context.Customers.AsNoTracking()
-			.Include(c => c.Users)
-			.Include(c => c.Jobs)
-			.FirstOrDefaultAsync(c => c.Id.ToString() == id);
-		return cust == null ? null : ToCustomer(cust, true);
+		var cust = await context.Customers.AsNoTracking().Include(c => c.Users).Include(c => c.Jobs).FirstOrDefaultAsync(c => c.Id.ToString() == id).ConfigureAwait(false);
+		return ToCustomer(cust, true);
 	}
 
 	public async Task<Shared.Entities.Customer[]> ListCustomers()
 	{
 		using var context = MakeContext();
-		return await context.Customers.AsNoTracking()
-			.AsAsyncEnumerable()
-			.Select(c => ToCustomer(c, false))
-			.ToArrayAsync()
-			.ConfigureAwait(false);
+		return await context.Customers.AsNoTracking().AsAsyncEnumerable().Select(c => ToCustomer(c, false)!).ToArrayAsync().ConfigureAwait(false);
 	}
 
 	public async Task<Shared.Entities.Customer> UpdateCustomer(Shared.Entities.Customer customer)
@@ -262,7 +255,7 @@ public class ExampleLicensingProvider : ILicensingProvider
 		else
 		{
 			// This is an update of an existing customer.
-			row = await context.Customers.FirstOrDefaultAsync(c => c.Id.ToString() == customer.Id) ?? throw new CarbonException(700, $"Customer Id {customer.Id} not found for update");
+			row = await context.Customers.FirstOrDefaultAsync(c => c.Id.ToString() == customer.Id).ConfigureAwait(false) ?? throw new CarbonException(700, $"Customer Id {customer.Id} not found for update");
 		}
 		row.Name = customer.Name;
 		row.DisplayName = customer.DisplayName;
@@ -282,17 +275,13 @@ public class ExampleLicensingProvider : ILicensingProvider
 		row.SignInNote = customer.SignInNote;
 		row.Spent = customer.Spent;
 		await context.SaveChangesAsync().ConfigureAwait(false);
-		row = await context.Customers.AsNoTracking()
-			.Include(c => c.Users)
-			.Include(c => c.Jobs)
-			.FirstAsync(c => c.Id == row.Id);
-		return ToCustomer(row, true);
+		return await RereadCustomer(context, row.Id).ConfigureAwait(false);
 	}
 
 	public async Task<string[]> ValidateCustomer(string customerId)
 	{
 		using var context = MakeContext();
-		var cust = await context.Customers.AsNoTracking().FirstOrDefaultAsync(c => c.Id.ToString() == customerId);
+		var cust = await context.Customers.AsNoTracking().FirstOrDefaultAsync(c => c.Id.ToString() == customerId).ConfigureAwait(false);
 		var list = new List<string>();
 		if (cust == null)
 		{
@@ -319,10 +308,7 @@ public class ExampleLicensingProvider : ILicensingProvider
 	public async Task<int> DeleteCustomer(string id)
 	{
 		using var context = MakeContext();
-		var cust = await context.Customers
-			.Include(c => c.Jobs)
-			.Include(c => c.Users)
-			.FirstOrDefaultAsync(c => c.Id == int.Parse(id));
+		var cust = await context.Customers.Include(c => c.Jobs).Include(c => c.Users).FirstOrDefaultAsync(c => c.Id == int.Parse(id)).ConfigureAwait(false);
 		if (cust == null) return 0;
 		foreach (var job in cust.Jobs.ToArray())
 		{
@@ -337,85 +323,90 @@ public class ExampleLicensingProvider : ILicensingProvider
 		return await context.SaveChangesAsync().ConfigureAwait(false);
 	}
 
-	public async Task<int> DisconnectCustomerChildJob(string customerId, string jobId)
+	public async Task<Shared.Entities.Customer?> ConnectCustomerChildJobs(string customerId, string[] jobIds)
 	{
+		int id = int.Parse(customerId);
 		using var context = MakeContext();
-		var cust = await context.Customers
-			.Include(c => c.Jobs)
-			.FirstOrDefaultAsync(c => c.Id.ToString() == customerId);
-		if (cust == null) return 0;
-		var job = cust.Jobs.FirstOrDefault(j => j.Id.ToString() == jobId);
-		if (job == null) return 0;
-		job.CustomerId = null;
-		cust.Jobs.Remove(job);
-		return await context.SaveChangesAsync();
-	}
-
-	public async Task<int> ConnectCustomerChildJobs(string customerId, string[] jobIds)
-	{
-		using var context = MakeContext();
-		var cust = await context.Customers
-			.Include(c => c.Jobs)
-			.FirstOrDefaultAsync(c => c.Id.ToString() == customerId);
-		if (cust == null) return 0;
+		var cust = await context.Customers.Include(c => c.Jobs).FirstOrDefaultAsync(c => c.Id == id);
+		if (cust == null) return null;
 		var addjobs = context.Jobs.Where(j => jobIds.Contains(j.Id.ToString())).ToArray();
 		foreach (var addjob in addjobs)
 		{
 			cust.Jobs.Add(addjob);
 		}
-		return await context.SaveChangesAsync();
+		await context.SaveChangesAsync().ConfigureAwait(false);
+		return await RereadCustomer(context, id).ConfigureAwait(false);
 	}
 
-	public async Task<int> DisconnectCustomerChildUser(string customerId, string userId)
+	public async Task<Shared.Entities.Customer?> DisconnectCustomerChildJob(string customerId, string jobId)
 	{
+		int id = int.Parse(customerId);
 		using var context = MakeContext();
-		var cust = await context.Customers
-			.Include(c => c.Users)
-			.FirstOrDefaultAsync(c => c.Id.ToString() == customerId);
-		if (cust == null) return 0;
-		var user = cust.Users.FirstOrDefault(j => j.Id.ToString() == userId);
-		if (user == null) return 0;
-		cust.Users.Remove(user);
-		return await context.SaveChangesAsync();
+		var cust = await context.Customers.Include(c => c.Jobs).FirstOrDefaultAsync(c => c.Id == id);
+		if (cust == null) return null;
+		var job = cust.Jobs.FirstOrDefault(j => j.Id.ToString() == jobId);
+		if (job != null)
+		{
+			job.CustomerId = null;
+			cust.Jobs.Remove(job);
+			await context.SaveChangesAsync();
+		}
+		await context.SaveChangesAsync().ConfigureAwait(false);
+		return await RereadCustomer(context, id).ConfigureAwait(false);
 	}
 
-	public async Task<int> ConnectCustomerChildUsers(string customerId, string[] userIds)
+	public async Task<Shared.Entities.Customer?> ConnectCustomerChildUsers(string customerId, string[] userIds)
 	{
+		int id = int.Parse(customerId);
 		using var context = MakeContext();
-		var cust = await context.Customers
-			.Include(c => c.Users)
-			.FirstOrDefaultAsync(c => c.Id.ToString() == customerId);
-		if (cust == null) return 0;
+		var cust = await context.Customers.Include(c => c.Users).FirstOrDefaultAsync(c => c.Id == id);
+		if (cust == null) return null;
 		var addusers = context.Users.Where(u => userIds.Contains(u.Id.ToString())).ToArray();
 		foreach (var adduser in addusers)
 		{
 			cust.Users.Add(adduser);
 		}
-		return await context.SaveChangesAsync();
+		await context.SaveChangesAsync().ConfigureAwait(false);
+		return await RereadCustomer(context, id).ConfigureAwait(false);
+	}
+
+	public async Task<Shared.Entities.Customer?> DisconnectCustomerChildUser(string customerId, string userId)
+	{
+		int id = int.Parse(customerId);
+		using var context = MakeContext();
+		var cust = await context.Customers.Include(c => c.Users).FirstOrDefaultAsync(c => c.Id == id);
+		if (cust == null) return null;
+		var user = cust.Users.FirstOrDefault(j => j.Id.ToString() == userId);
+		if (user != null)
+		{
+			cust.Users.Remove(user);
+		}
+		await context.SaveChangesAsync().ConfigureAwait(false);
+		return await RereadCustomer(context, id).ConfigureAwait(false);
+	}
+
+	static async Task<Shared.Entities.Customer?> RereadCustomer(ExampleContext context, int customerId)
+	{
+		var cust = await context.Customers.AsNoTracking().Include(c => c.Users).Include(c => c.Jobs).FirstOrDefaultAsync(c => c.Id == customerId).ConfigureAwait(false);
+		return ToCustomer(cust, true);
 	}
 
 	#endregion
 
 	#region Job
 
-	public async Task<Shared.Entities.Job?> ReadJob(string id)
+	public async Task<Shared.Entities.Job?> ReadJob(string jobId)
 	{
+		int id = int.Parse(jobId);
 		using var context = MakeContext();
-		var job = await context.Jobs.AsNoTracking()
-			.Include(j => j.Customer)
-			.Include(j => j.Users)
-			.FirstOrDefaultAsync(j => j.Id.ToString() == id);
-		return job == null ? null : ToJob(job, true);
+		var job = await context.Jobs.AsNoTracking().Include(j => j.Customer).Include(j => j.Users).FirstOrDefaultAsync(j => j.Id == id).ConfigureAwait(false);
+		return ToJob(job, true);
 	}
 
 	public async Task<Shared.Entities.Job[]> ListJobs()
 	{
 		using var context = MakeContext();
-		return await context.Jobs.AsNoTracking()
-			.AsAsyncEnumerable()
-			.Select(j => ToJob(j, true))
-			.ToArrayAsync()
-			.ConfigureAwait(false);
+		return await context.Jobs.AsNoTracking().AsAsyncEnumerable().Select(j => ToJob(j, true)!).ToArrayAsync().ConfigureAwait(false);
 	}
 
 	public async Task<Shared.Entities.Job> UpdateJob(Shared.Entities.Job job)
@@ -452,17 +443,14 @@ public class ExampleLicensingProvider : ILicensingProvider
 		row.VartreeNames = job.VartreeNames?.Length > 0 ? string.Join(",", job.VartreeNames) : null;
 		row.LastUpdate = DateTime.UtcNow;
 		await context.SaveChangesAsync().ConfigureAwait(false);
-		row = await context.Jobs.AsNoTracking()
-			.Include(j => j.Customer)
-			.Include(j => j.Users)
-			.FirstAsync(j => j.Id == row.Id);
-		return ToJob(row, true);
+		return await RereadJob(context, row.Id).ConfigureAwait(false);
 	}
 
 	public async Task<string[]> ValidateJob(string jobId)
 	{
+		int id = int.Parse(jobId);
 		using var context = MakeContext();
-		var job = await context.Jobs.AsNoTracking().Include(j => j.Customer).FirstOrDefaultAsync(j => j.Id.ToString() == jobId);
+		var job = await context.Jobs.AsNoTracking().Include(j => j.Customer).FirstOrDefaultAsync(j => j.Id == id);
 		var list = new List<string>();
 		if (job == null)
 		{
@@ -494,12 +482,11 @@ public class ExampleLicensingProvider : ILicensingProvider
 		return list.ToArray();
 	}
 
-	public async Task<int> DeleteJob(string id)
+	public async Task<int> DeleteJob(string jobId)
 	{
+		int id = int.Parse(jobId);
 		using var context = MakeContext();
-		var job = await context.Jobs
-			.Include(j => j.Users)
-			.FirstOrDefaultAsync(j => j.Id == int.Parse(id));
+		var job = await context.Jobs.Include(j => j.Users).FirstOrDefaultAsync(j => j.Id == id).ConfigureAwait(false);
 		if (job == null) return 0;
 		foreach (var user in job.Users.ToArray())
 		{
@@ -509,56 +496,58 @@ public class ExampleLicensingProvider : ILicensingProvider
 		return await context.SaveChangesAsync().ConfigureAwait(false);
 	}
 
-	public async Task<int> DisconnectJobChildUser(string jobId, string userId)
+	public async Task<Shared.Entities.Job?> ConnectJobChildUsers(string jobId, string[] userIds)
 	{
+		int id = int.Parse(jobId);
 		using var context = MakeContext();
-		var job = await context.Jobs
-			.Include(c => c.Users)
-			.FirstOrDefaultAsync(j => j.Id.ToString() == jobId);
-		if (job == null) return 0;
-		var user = job.Users.FirstOrDefault(u => u.Id.ToString() == userId);
-		if (user == null) return 0;
-		job.Users.Remove(user);
-		return await context.SaveChangesAsync();
-	}
-
-	public async Task<int> ConnectJobChildUsers(string jobId, string[] userIds)
-	{
-		using var context = MakeContext();
-		var job = await context.Jobs
-			.Include(j => j.Users)
-			.FirstOrDefaultAsync(j => j.Id.ToString() == jobId);
-		if (job == null) return 0;
+		var job = await context.Jobs.Include(j => j.Users).FirstOrDefaultAsync(j => j.Id.ToString() == jobId).ConfigureAwait(false);
+		if (job == null) return null;
 		var addusers = context.Users.Where(j => userIds.Contains(j.Id.ToString())).ToArray();
 		foreach (var adduser in addusers)
 		{
 			job.Users.Add(adduser);
 		}
-		return await context.SaveChangesAsync();
+		await context.SaveChangesAsync().ConfigureAwait(false);
+		return await RereadJob(context, id).ConfigureAwait(false);
+	}
+
+	public async Task<Shared.Entities.Job?> DisconnectJobChildUser(string jobId, string userId)
+	{
+		int id = int.Parse(jobId);
+		using var context = MakeContext();
+		var job = await context.Jobs.Include(c => c.Users).FirstOrDefaultAsync(j => j.Id.ToString() == jobId).ConfigureAwait(false);
+		if (job == null) return null;
+		var user = job.Users.FirstOrDefault(u => u.Id.ToString() == userId);
+		if (user != null)
+		{
+			job.Users.Remove(user);
+		}
+		await context.SaveChangesAsync().ConfigureAwait(false);
+		return await RereadJob(context, id).ConfigureAwait(false);
+	}
+
+	static async Task<Shared.Entities.Job?> RereadJob(ExampleContext context, int jobId)
+	{
+		var cust = await context.Jobs.AsNoTracking().Include(c => c.Users).FirstOrDefaultAsync(c => c.Id == jobId).ConfigureAwait(false);
+		return ToJob(cust, true);
 	}
 
 	#endregion
 
 	#region User
 
-	public async Task<Shared.Entities.User?> ReadUser(string id)
+	public async Task<Shared.Entities.User?> ReadUser(string userId)
 	{
+		int id = int.Parse(userId);
 		using var context = MakeContext();
-		var user = await context.Users.AsNoTracking()
-			.Include(u => u.Customers)
-			.Include(u => u.Jobs)
-			.FirstOrDefaultAsync(u => u.Id.ToString() == id);
+		var user = await context.Users.AsNoTracking().Include(u => u.Customers).Include(u => u.Jobs).FirstOrDefaultAsync(u => u.Id == id).ConfigureAwait(false);
 		return user == null ? null : ToUser(user, true);
 	}
 
 	public async Task<Shared.Entities.User[]> ListUsers()
 	{
 		using var context = MakeContext();
-		return await context.Users.AsNoTracking()
-			.AsAsyncEnumerable()
-			.Select(u => ToUser(u, false))
-			.ToArrayAsync()
-			.ConfigureAwait(false);
+		return await context.Users.AsNoTracking().AsAsyncEnumerable().Select(u => ToUser(u, false)!).ToArrayAsync().ConfigureAwait(false);
 	}
 
 	public async Task<Shared.Entities.User> UpdateUser(Shared.Entities.User user)
@@ -603,20 +592,15 @@ public class ExampleLicensingProvider : ILicensingProvider
 		row.MinVersion = user.MinVersion;
 		row.IsDisabled = user.IsDisabled;
 		await context.SaveChangesAsync().ConfigureAwait(false);
-		row = await context.Users.AsNoTracking()
-			.Include(u => u.Customers)
-			.Include(u => u.Jobs)
-			.FirstAsync(u => u.Id == row.Id);
-		return ToUser(row, true);
+		row = await context.Users.AsNoTracking().Include(u => u.Customers).Include(u => u.Jobs).FirstAsync(u => u.Id == row.Id);
+		return await RereadUser(context, row.Id).ConfigureAwait(false);
 	}
 
-	public async Task<int> DeleteUser(string id)
+	public async Task<int> DeleteUser(string userId)
 	{
+		int id = int.Parse(userId);
 		using var context = MakeContext();
-		var user = await context.Users
-			.Include(u => u.Customers)
-			.Include(u => u.Jobs)
-			.FirstOrDefaultAsync(u => u.Id == int.Parse(id));
+		var user = await context.Users.Include(u => u.Customers).Include(u => u.Jobs).FirstOrDefaultAsync(u => u.Id == id).ConfigureAwait(false);
 		if (user == null) return 0;
 		foreach (var job in user.Jobs.ToArray())
 		{
@@ -630,60 +614,72 @@ public class ExampleLicensingProvider : ILicensingProvider
 		return await context.SaveChangesAsync().ConfigureAwait(false);
 	}
 
-	public async Task<int> DisconnectUserChildCustomer(string userId, string customerId)
+	public async Task<Shared.Entities.User?> ConnectUserChildCustomers(string userId, string[] customerIds)
 	{
+		int id = int.Parse(userId);
 		using var context = MakeContext();
-		var user = await context.Users
-			.Include(c => c.Customers)
-			.FirstOrDefaultAsync(u => u.Id.ToString() == userId);
-		if (user == null) return 0;
-		var cust = user.Customers.FirstOrDefault(c => c.Id.ToString() == customerId);
-		if (cust == null) return 0;
-		user.Customers.Remove(cust);
-		return await context.SaveChangesAsync();
-	}
-
-	public async Task<int> ConnectUserChildCustomers(string userId, string[] customerIds)
-	{
-		using var context = MakeContext();
-		var user = await context.Users
-			.Include(u => u.Customers)
-			.FirstOrDefaultAsync(u => u.Id.ToString() == userId);
-		if (user == null) return 0;
+		var user = await context.Users.Include(u => u.Customers).FirstOrDefaultAsync(u => u.Id.ToString() == userId).ConfigureAwait(false);
+		if (user == null) return null;
 		var addcusts = context.Customers.Where(c => customerIds.Contains(c.Id.ToString())).ToArray();
 		foreach (var addcust in addcusts)
 		{
 			user.Customers.Add(addcust);
 		}
-		return await context.SaveChangesAsync();
+		await context.SaveChangesAsync().ConfigureAwait(false);
+		return await RereadUser(context, id);
 	}
 
-	public async Task<int> DisconnectUserChildJob(string userId, string jobId)
+	public async Task<Shared.Entities.User?> DisconnectUserChildCustomer(string userId, string customerId)
 	{
+		int id = int.Parse(userId);
 		using var context = MakeContext();
-		var user = await context.Users
-			.Include(c => c.Jobs)
-			.FirstOrDefaultAsync(u => u.Id.ToString() == userId);
-		if (user == null) return 0;
-		var cust = user.Jobs.FirstOrDefault(j => j.Id.ToString() == jobId);
-		if (cust == null) return 0;
-		user.Jobs.Remove(cust);
-		return await context.SaveChangesAsync();
+		var user = await context.Users.Include(c => c.Customers).FirstOrDefaultAsync(u => u.Id.ToString() == userId).ConfigureAwait(false);
+		if (user == null) return null;
+		var cust = user.Customers.FirstOrDefault(c => c.Id.ToString() == customerId);
+		if (cust != null)
+		{
+			user.Customers.Remove(cust);
+			await context.SaveChangesAsync();
+		}
+		await context.SaveChangesAsync().ConfigureAwait(false);
+		return await RereadUser(context, id);
 	}
 
-	public async Task<int> ConnectUserChildJobs(string userId, string[] jobIds)
+	public async Task<Shared.Entities.User?> ConnectUserChildJobs(string userId, string[] jobIds)
 	{
+		int id = int.Parse(userId);
 		using var context = MakeContext();
-		var user = await context.Users
-			.Include(u => u.Jobs)
-			.FirstOrDefaultAsync(u => u.Id.ToString() == userId);
-		if (user == null) return 0;
+		var user = await context.Users.Include(u => u.Jobs).FirstOrDefaultAsync(u => u.Id.ToString() == userId).ConfigureAwait(false);
+		if (user == null) return null;
 		var addjobs = context.Jobs.Where(j => jobIds.Contains(j.Id.ToString())).ToArray();
 		foreach (var addjob in addjobs)
 		{
 			user.Jobs.Add(addjob);
 		}
-		return await context.SaveChangesAsync();
+		await context.SaveChangesAsync().ConfigureAwait(false);
+		return await RereadUser(context, id).ConfigureAwait(false);
+	}
+
+	public async Task<Shared.Entities.User?> DisconnectUserChildJob(string userId, string jobId)
+	{
+		int id = int.Parse(userId);
+		using var context = MakeContext();
+		var user = await context.Users.Include(c => c.Jobs).FirstOrDefaultAsync(u => u.Id.ToString() == userId);
+		if (user == null) return null;
+		var cust = user.Jobs.FirstOrDefault(j => j.Id.ToString() == jobId);
+		if (cust != null)
+		{
+			user.Jobs.Remove(cust);
+			await context.SaveChangesAsync();
+		}
+		await context.SaveChangesAsync().ConfigureAwait(false);
+		return await RereadUser(context, id);
+	}
+
+	static async Task<Shared.Entities.User?> RereadUser(ExampleContext context, int userId)
+	{
+		var cust = await context.Users.AsNoTracking().Include(c => c.Customers).Include(c => c.Jobs).FirstOrDefaultAsync(c => c.Id == userId).ConfigureAwait(false);
+		return ToUser(cust, true);
 	}
 
 	#endregion
@@ -746,84 +742,96 @@ public class ExampleLicensingProvider : ILicensingProvider
 		};
 	}
 
-	static Shared.Entities.Customer ToCustomer(Customer cust, bool includeChildren) => new()
+	static Shared.Entities.Customer? ToCustomer(Customer? cust, bool includeChildren)
 	{
-		Id = cust.Id.ToString(),
-		Name = cust.Name,
-		DisplayName = cust.DisplayName,
-		StorageKey = cust.StorageKey,
-		Comment = cust.Comment,
-		CloudCustomerNames = cust.CloudCustomerNames?.Split(',') ?? Array.Empty<string>(),
-		Corporation = cust.Corporation,
-		Sunset = cust.Sunset,
-		Sequence = cust.Sequence,
-		Created = cust.Created,
-		Credits = cust.Credits,
-		DataLocation = (Shared.Entities.DataLocationType?)cust.DataLocation,
-		Inactive = cust.Inactive,
-		Info = cust.Info,
-		Logo = cust.Logo,
-		Psw = cust.Psw,
-		SignInLogo = cust.SignInLogo,
-		SignInNote = cust.SignInNote,
-		Spent = cust.Spent,
-		Jobs = includeChildren ? cust.Jobs?.Select(j => ToJob(j, false)).ToArray() : null,
-		Users = includeChildren ? cust.Users?.Select(u => ToUser(u, false)).ToArray() : null
-	};
+		if (cust == null) return null;
+		return new()
+		{
+			Id = cust.Id.ToString(),
+			Name = cust.Name,
+			DisplayName = cust.DisplayName,
+			StorageKey = cust.StorageKey,
+			Comment = cust.Comment,
+			CloudCustomerNames = cust.CloudCustomerNames?.Split(',') ?? Array.Empty<string>(),
+			Corporation = cust.Corporation,
+			Sunset = cust.Sunset,
+			Sequence = cust.Sequence,
+			Created = cust.Created,
+			Credits = cust.Credits,
+			DataLocation = (Shared.Entities.DataLocationType?)cust.DataLocation,
+			Inactive = cust.Inactive,
+			Info = cust.Info,
+			Logo = cust.Logo,
+			Psw = cust.Psw,
+			SignInLogo = cust.SignInLogo,
+			SignInNote = cust.SignInNote,
+			Spent = cust.Spent,
+			Jobs = includeChildren ? cust.Jobs?.Select(j => ToJob(j, false)).ToArray() : null,
+			Users = includeChildren ? cust.Users?.Select(u => ToUser(u, false)).ToArray() : null
+		};
+	}
 
-	static Shared.Entities.Job ToJob(Job job, bool includeChildren) => new()
+	static Shared.Entities.Job? ToJob(Job? job, bool includeChildren)
 	{
-		Id = job.Id.ToString(),
-		Name = job.Name,
-		DataLocation = (Shared.Entities.DataLocationType?)job.DataLocation,
-		DisplayName = job.DisplayName,
-		Description = job.Description,
-		Cases = job.Cases,
-		Logo = job.Logo,
-		Info = job.Info,
-		Inactive = job.Inactive,
-		Created = job.Created,
-		IsMobile = job.IsMobile,
-		DashboardsFirst = job.DashboardsFirst,
-		LastUpdate = job.LastUpdate,
-		Sequence = job.Sequence,
-		Url = job.Url,
-		CustomerId = job.CustomerId.ToString(),
-		VartreeNames = job.VartreeNames?.Split(',') ?? Array.Empty<string>(),
-		Users = includeChildren ? job.Users?.Select(u => ToUser(u, false)).ToArray() : null,
-		Customer = includeChildren ? job.Customer == null ? null : ToCustomer(job.Customer, false) : null
-	};
+		if (job == null) return null;
+		return new()
+		{
+			Id = job.Id.ToString(),
+			Name = job.Name,
+			DataLocation = (Shared.Entities.DataLocationType?)job.DataLocation,
+			DisplayName = job.DisplayName,
+			Description = job.Description,
+			Cases = job.Cases,
+			Logo = job.Logo,
+			Info = job.Info,
+			Inactive = job.Inactive,
+			Created = job.Created,
+			IsMobile = job.IsMobile,
+			DashboardsFirst = job.DashboardsFirst,
+			LastUpdate = job.LastUpdate,
+			Sequence = job.Sequence,
+			Url = job.Url,
+			CustomerId = job.CustomerId.ToString(),
+			VartreeNames = job.VartreeNames?.Split(',') ?? Array.Empty<string>(),
+			Users = includeChildren ? job.Users?.Select(u => ToUser(u, false)).ToArray() : null,
+			Customer = includeChildren ? job.Customer == null ? null : ToCustomer(job.Customer, false) : null
+		};
+	}
 
-	static Shared.Entities.User ToUser(User user, bool includeChildren) => new()
+	static Shared.Entities.User? ToUser(User? user, bool includeChildren)
 	{
-		Id = user.Id.ToString(),
-		Name = user.Name,
-		ProviderId = user.ProviderId,
-		Psw = user.Psw,
-		PassHash = user.PassHash,
-		Email = user.Email,
-		EntityId = user.EntityId,
-		CloudCustomerNames = user.CloudCustomerNames?.Split(",; ".ToCharArray(), StringSplitOptions.RemoveEmptyEntries) ?? Array.Empty<string>(),
-		JobNames = user.JobNames?.Split(",; ".ToCharArray(), StringSplitOptions.RemoveEmptyEntries) ?? Array.Empty<string>(),
-		VartreeNames = user.VartreeNames?.Split(",; ".ToCharArray(), StringSplitOptions.RemoveEmptyEntries) ?? Array.Empty<string>(),
-		DashboardNames = user.DashboardNames?.Split(",; ".ToCharArray(), StringSplitOptions.RemoveEmptyEntries) ?? Array.Empty<string>(),
-		DataLocation = (Shared.Entities.DataLocationType?)user.DataLocation,
-		Sequence = user.Sequence,
-		Uid = user.Uid,
-		Comment = user.Comment,
-		Roles = user.Roles?.Split(",; ".ToCharArray(), StringSplitOptions.RemoveEmptyEntries) ?? Array.Empty<string>(),
-		Filter = user.Filter,
-		LoginMacs = user.LoginMacs,
-		LoginCount = user.LoginCount,
-		LoginMax = user.LoginMax,
-		LastLogin = user.LastLogin,
-		Sunset = user.Sunset,
-		Version = user.Version,
-		MinVersion = user.MinVersion,
-		IsDisabled = user.IsDisabled,
-		Customers = includeChildren ? user.Customers?.Select(c => ToCustomer(c, false)).ToArray() : null,
-		Jobs = includeChildren ? user.Jobs?.Select(j => ToJob(j, false)).ToArray() : null
-	};
+		if (user == null) return null;
+		return new()
+		{
+			Id = user.Id.ToString(),
+			Name = user.Name,
+			ProviderId = user.ProviderId,
+			Psw = user.Psw,
+			PassHash = user.PassHash,
+			Email = user.Email,
+			EntityId = user.EntityId,
+			CloudCustomerNames = user.CloudCustomerNames?.Split(",; ".ToCharArray(), StringSplitOptions.RemoveEmptyEntries) ?? Array.Empty<string>(),
+			JobNames = user.JobNames?.Split(",; ".ToCharArray(), StringSplitOptions.RemoveEmptyEntries) ?? Array.Empty<string>(),
+			VartreeNames = user.VartreeNames?.Split(",; ".ToCharArray(), StringSplitOptions.RemoveEmptyEntries) ?? Array.Empty<string>(),
+			DashboardNames = user.DashboardNames?.Split(",; ".ToCharArray(), StringSplitOptions.RemoveEmptyEntries) ?? Array.Empty<string>(),
+			DataLocation = (Shared.Entities.DataLocationType?)user.DataLocation,
+			Sequence = user.Sequence,
+			Uid = user.Uid,
+			Comment = user.Comment,
+			Roles = user.Roles?.Split(",; ".ToCharArray(), StringSplitOptions.RemoveEmptyEntries) ?? Array.Empty<string>(),
+			Filter = user.Filter,
+			LoginMacs = user.LoginMacs,
+			LoginCount = user.LoginCount,
+			LoginMax = user.LoginMax,
+			LastLogin = user.LastLogin,
+			Sunset = user.Sunset,
+			Version = user.Version,
+			MinVersion = user.MinVersion,
+			IsDisabled = user.IsDisabled,
+			Customers = includeChildren ? user.Customers?.Select(c => ToCustomer(c, false)).ToArray() : null,
+			Jobs = includeChildren ? user.Jobs?.Select(j => ToJob(j, false)).ToArray() : null
+		};
+	}
 
 	#endregion
 
