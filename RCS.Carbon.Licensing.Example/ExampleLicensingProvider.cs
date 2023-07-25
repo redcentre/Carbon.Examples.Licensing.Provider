@@ -5,9 +5,11 @@ using System.ComponentModel.DataAnnotations;
 using System.Diagnostics;
 using System.Linq;
 using System.Reflection;
+using System.Security.Cryptography;
 using System.Threading.Tasks;
 using System.Xml.Linq;
 using Azure.Storage.Blobs;
+using Azure.Storage.Blobs.Models;
 using Microsoft.EntityFrameworkCore;
 using RCS.Carbon.Licensing.Example.EFCore;
 using RCS.Carbon.Licensing.Shared;
@@ -26,9 +28,10 @@ public class ExampleLicensingProvider : ILicensingProvider
 	readonly string? _connect;
 	const string GuestAccountName = "guest";
 
+	[Description("Example licensing provider using a SQL Server database")]
 	public ExampleLicensingProvider(
 		[Required]
-		[Description("The ADO connection string to the licensing database.")]
+		[Description("ADO database connection string")]
 		string adoConnectionString
 	)
 	{
@@ -421,6 +424,26 @@ public class ExampleLicensingProvider : ILicensingProvider
 				Created = DateTime.UtcNow
 			};
 			context.Jobs.Add(row);
+			// Ensure a container for the job in the parent customer storage account.
+			if (job.CustomerId != null)
+			{
+				int custid = int.Parse(job.CustomerId);
+				var cust = await context.Customers.AsNoTracking().FirstOrDefaultAsync(c => c.Id == custid).ConfigureAwait(false);
+				if (cust != null)
+				{
+					try
+					{
+						var client = new BlobServiceClient(cust.StorageKey);
+						var cc = client.GetBlobContainerClient(job.Name);
+						Azure.Response<BlobContainerInfo> resp = await cc.CreateIfNotExistsAsync().ConfigureAwait(false);
+						Trace.WriteLine($"Create container '{job.Name}' in customer '{cust.Name}' - {resp.Value.ETag}");
+					}
+					catch (Exception ex)
+					{
+						Trace.WriteLine($"Failed to create container '{job.Name}' in customer '{cust.Name}' - {ex.Message}");
+					}
+				}
+			}
 		}
 		else
 		{
@@ -443,7 +466,8 @@ public class ExampleLicensingProvider : ILicensingProvider
 		row.VartreeNames = job.VartreeNames?.Length > 0 ? string.Join(",", job.VartreeNames) : null;
 		row.LastUpdate = DateTime.UtcNow;
 		await context.SaveChangesAsync().ConfigureAwait(false);
-		return await RereadJob(context, row.Id).ConfigureAwait(false);
+		Shared.Entities.Job job2 = await RereadJob(context, row.Id).ConfigureAwait(false);
+		return job2;
 	}
 
 	public async Task<string[]> ValidateJob(string jobId)
@@ -528,8 +552,8 @@ public class ExampleLicensingProvider : ILicensingProvider
 
 	static async Task<Shared.Entities.Job?> RereadJob(ExampleContext context, int jobId)
 	{
-		var cust = await context.Jobs.AsNoTracking().Include(c => c.Users).FirstOrDefaultAsync(c => c.Id == jobId).ConfigureAwait(false);
-		return ToJob(cust, true);
+		var job = await context.Jobs.AsNoTracking().Include(c => c.Users).FirstOrDefaultAsync(c => c.Id == jobId).ConfigureAwait(false);
+		return ToJob(job, true);
 	}
 
 	#endregion
@@ -556,9 +580,13 @@ public class ExampleLicensingProvider : ILicensingProvider
 		User row;
 		if (user.Id == null)
 		{
+			Guid uid = Guid.NewGuid();
 			row = new User
 			{
 				Id = Random.Shared.Next(10_000_000, 20_000_000),
+				Uid = uid,
+				Psw = null,		// The plaintext password might be needed for legacy usage, but avoid like the plague.
+				PassHash = user.PassHash ?? HP(user.Psw, uid),
 				Created = DateTime.UtcNow
 			};
 			context.Users.Add(row);
@@ -570,7 +598,7 @@ public class ExampleLicensingProvider : ILicensingProvider
 		row.Name = user.Name;
 		row.ProviderId = user.ProviderId;
 		row.Psw = user.Psw;
-		row.PassHash = user.PassHash;
+		row.PassHash = user.PassHash ?? HP(user.Psw, user.Uid);
 		row.Email = user.Email;
 		row.EntityId = user.EntityId;
 		row.CloudCustomerNames = user.CloudCustomerNames.Length > 0 ? string.Join(" ", user.CloudCustomerNames) : null;
@@ -791,7 +819,7 @@ public class ExampleLicensingProvider : ILicensingProvider
 			LastUpdate = job.LastUpdate,
 			Sequence = job.Sequence,
 			Url = job.Url,
-			CustomerId = job.CustomerId.ToString(),
+			CustomerId = job.CustomerId?.ToString(),
 			VartreeNames = job.VartreeNames?.Split(',') ?? Array.Empty<string>(),
 			Users = includeChildren ? job.Users?.Select(u => ToUser(u, false)).ToArray() : null,
 			Customer = includeChildren ? job.Customer == null ? null : ToCustomer(job.Customer, false) : null
@@ -834,6 +862,13 @@ public class ExampleLicensingProvider : ILicensingProvider
 	}
 
 	#endregion
+
+	static byte[]? HP(string psw, Guid uid)
+	{
+		if (psw == null) return null;
+		using var deriver = new Rfc2898DeriveBytes(psw, uid.ToByteArray(), 15000, HashAlgorithmName.SHA1);
+		return deriver.GetBytes(16);
+	}
 
 	ExampleContext MakeContext() => new(_connect);
 

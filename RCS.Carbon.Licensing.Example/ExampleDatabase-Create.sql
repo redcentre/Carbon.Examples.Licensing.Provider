@@ -65,7 +65,7 @@ CREATE TABLE [dbo].[User]
 	[Name] NVARCHAR(128) NOT NULL,
 	[ProviderId] NVARCHAR(128) NULL,
 	[Psw] NVARCHAR(64) NULL,
-	[PassHash] NVARCHAR(512) NULL,
+	[PassHash] VARBINARY(512) NULL,
 	[Email] NVARCHAR(128) NULL,
 	[EntityId] NVARCHAR(16) NULL,
 	[CloudCustomerNames] NVARCHAR(256) NULL,
@@ -74,7 +74,7 @@ CREATE TABLE [dbo].[User]
 	[DashboardNames] NVARCHAR(256) NULL,
 	[DataLocation] INT NULL,
 	[Sequence] INT NULL,
-	[Uid] UNIQUEIDENTIFIER NULL,
+	[Uid] UNIQUEIDENTIFIER NOT NULL CONSTRAINT DF_User_Uid DEFAULT NEWID(),
 	[Comment] NVARCHAR(2000) NULL,
 	[Roles] NVARCHAR(128) NULL,
 	[Filter] NVARCHAR(128) NULL,
@@ -126,9 +126,9 @@ INSERT INTO [Job] (Id,CustomerId,[Name],Displayname,VartreeNames) VALUES(2000000
 INSERT INTO [Job] (Id,CustomerId,[Name],Displayname,VartreeNames) VALUES(20000007, 30000022, 'demo', 'Demo Ruby', 'TsapiTree,VarTree');
 INSERT INTO [Job] (Id,CustomerId,[Name],Displayname,VartreeNames) VALUES(20000008, NULL, 'orphan', 'Orphan Job', NULL);
 GO
-INSERT INTO [User] (Id,[Name],DisplayName,[Email],Psw,Comment) VALUES(10000013, 'john', 'John Citizen', 'john@mail.com', 'J0hn123', 'John is a normal user.');
-INSERT INTO [User] (Id,[Name],DisplayName,[Email],Psw,Comment) VALUES(10000022, 'max', 'Max Power', 'max@powerhouse.com', 'Max1mum', 'Max can do anything.');
-INSERT INTO [User] (Id,[Name],DisplayName,[Email],Psw,Comment) VALUES(10000335, 'guest', 'Guest User', NULL, 'guest', 'Guest user for evaluation and demos.');
+INSERT INTO [User] (Id,[Name],[Email],Psw,Comment) VALUES(10000013, 'john', 'john@mail.com', 'J0hn123', 'John is a normal user.');
+INSERT INTO [User] (Id,[Name],[Email],Psw,Comment) VALUES(10000022, 'max', 'max@powerhouse.com', 'Max1mum', 'Max can do anything.');
+INSERT INTO [User] (Id,[Name],[Email],Psw,Comment) VALUES(10000335, 'guest', NULL, 'guest', 'Guest user for evaluation and demos.');
 GO
 INSERT INTO [UserCustomer] VALUES(10000013,30000011);
 INSERT INTO [UserCustomer] VALUES(10000013,30000022);

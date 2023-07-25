@@ -26,8 +26,7 @@ public partial class User
 	[StringLength(64)]
 	public string Psw { get; set; }
 
-	[StringLength(512)]
-	public string PassHash { get; set; }
+	public byte[] PassHash { get; set; }
 
 	[StringLength(128)]
 	public string Email { get; set; }
@@ -51,7 +50,7 @@ public partial class User
 
 	public int? Sequence { get; set; }
 
-	public Guid? Uid { get; set; }
+	public Guid Uid { get; set; }
 
 	[StringLength(2000)]
 	public string Comment { get; set; }
