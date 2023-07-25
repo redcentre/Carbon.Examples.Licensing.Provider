@@ -2,20 +2,31 @@
 
 The Carbon cross-tabulation engine depends upon a licensing system to define rules for authenticating access to data.
 
-[Red Centre Software][rcs] uses a proprietary licensing system when Carbon accesses jobs in Azure storage accounts hosted by Red Centre Software. A company that wishes to sever ties with Red Centre Software hosting and use Carbon to access jobs in their own Azure subscription must provide their own licensing system to the Carbon engine. A .NET class that acts as a licensing provider must implement the following interface:
+[Red Centre Software][rcs] uses a proprietary licensing system when Carbon accesses jobs in Azure storage accounts hosted by Red Centre Software. A company that wishes to sever ties with Red Centre Software hosting and use Carbon to access jobs in their own Azure subscription must provide their own licensing system to the Carbon engine. A .NET class that acts as a licensing provider must implement the `ILicensingProvider` interface. The full interface contains about 30 members, but a minimal working provider only needs to implement the following:
 
 ```
 public interface ILicensingProvider : IDisposable
 {
-  Task<LicenceFull> GetLicenceName(string userName, string password);
-  Task<LicenceFull> GetFreeLicence(string clientIdentifier = null, bool skipCache = false);
+  string Name { get; }
+  string Description { get; }
   Task<LicenceFull> LoginId(string userId, string password, bool skipCache = false);
+  Task<LicenceFull> LoginName(string userName, string password);
+  Task<LicenceFull> GetFreeLicence(string clientIdentifier = null, bool skipCache = false);
   Task<int> ReturnId(string userId);
   Task<int> LogoutId(string userId);
 }
 ```
 
-An abstract base class called [LicensingProviderBase][licprovcls] is provided in the [RCS.Carbon.Licensing.Shared][licshared] NuGet package as guidance to implement a provider correctly. Overriding the Core virtual methods will help ensure a correct licensing provider implementation.
+Other unused interface members can be implemented like this:
+
+```
+  public Task<NavData> GetNavigationData() => throw new NotImplementedException();
+  // etc
+```
+
+The other interface members are only needed if the provider wishes to be a general-purpose licensing database management plug-in to the Midas Licensing Management Tool, which will be described in an upcoming Wiki page.
+
+---
 
 Carbon recognises the following fundamental definitions of parts of a licensing provider:
 
@@ -63,19 +74,21 @@ The SQL Server database used by the example licensing provider can be hosted in 
 
 ### Local
 
-To create a local database, the simplest option is to use SSMS (SQL Server Management Studio) to connect to a local server and create a new database using defult values in a suitable folder. Run the script in the file `ExampleDatabase-Create.sql` to create the database schema and inset sample rows.
+To create a local database, the simplest option is to use SSMS (SQL Server Management Studio) to connect to a local server and create a new database using defult values and a suitable folder. Run the script in the file `ExampleDatabase-Create.sql` to create the database schema and inset sample rows.
 
 ### Azure
 
 Use the Azure subscription web portal to create a SQL Server, if a suitable one doesn't exist. Create a SQL Server database named `CarbonLicensingExample` in the server.
 
-Use SSMS to connect to the Azure database and run the script in `ExampleDatabase-Create.sql` to create the database schema and inset sample rows. The SSMS Server value will be in the format:
+Use SSMS to connect to the Azure database and run the script in `ExampleDatabase-Create.sql` to create the database schema and insert sample rows. The SSMS Server value will be in the format:
 
 ```
 tcp:{SERVERNAME}.database.windows.net,1433
 ```
 
 The SQL Server Authentication User Name and Password credentials are created when the Azure server is created in the portal. The connections strings are displayed in the Connection Strings blade for the database.
+
+---
 
 ## Developer Notes
 
@@ -84,8 +97,8 @@ The following sections are technical notes about how the example provider projec
 Install packages:
 
 ```
-Microsoft.EntityFrameworkCore.SqlServer 7.0.8
-Microsoft.EntityFrameworkCore.Tools 7.0.8
+Microsoft.EntityFrameworkCore.SqlServer 7.0.9
+Microsoft.EntityFrameworkCore.Tools 7.0.9
 ```
 
 The installed Tools might not be the latest. Use the following command to ensure the latest is installed:
@@ -100,9 +113,7 @@ Scaffold the classes from the database:
 ▶ cmd /c 'dotnet ef DbContext Scaffold "Server=tcp:{SERVERNAME}.database.windows.net,1433;Initial Catalog=CarbonLicensingExample;Persist Security Info=False;User ID=greg;Password={your_password};MultipleActiveResultSets=False;Encrypt=True;TrustServerCertificate=False;Connection Timeout=30;" Microsoft.EntityFrameworkCore.SqlServer --output-dir EFCore --data-annotations --context ExampleContext'
 ```
 
-The generated classes will need adjusting to have all of the recommended [Data Annotation][annot] attributes. This has been done and the completed classes are in the EFCore folder of the example project.
+The generated classes will need adjusting to have all of the recommended [Data Annotation][annot] attributes. This has been done in the example project and the completed classes are in the EFCore folder of the example project.
 
 [rcs]: https://www.redcentresoftware.com/
 [annot]: https://learn.microsoft.com/en-us/ef/ef6/modeling/code-first/data-annotations
-[licprovcls]: https://github.com/redcentre/Carbon.Examples.Licensing.Provider/blob/main/RCS.Carbon.Licensing.Example/ExampleLicensingProvider.cs
-[licshared]: https://www.nuget.org/packages/RCS.Carbon.Licensing.Shared
