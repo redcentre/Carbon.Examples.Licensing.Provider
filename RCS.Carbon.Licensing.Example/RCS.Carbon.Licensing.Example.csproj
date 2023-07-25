@@ -1,15 +1,25 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <Version>1.0.3</Version>
-    <InformationalVersion>2023-07-25 15:28 GMT+10</InformationalVersion>
+    <Version>1.0.4</Version>
+    <InformationalVersion>2023-07-25 15:49 GMT+10</InformationalVersion>
     <TargetFrameworks>net60</TargetFrameworks>
     <Authors>Red Centre Software</Authors>
     <Company>Red Centre Software</Company>
     <Product>Carbon</Product>
     <Description>Example minimal licensing provider that uses a SQl Server database as backing storage.</Description>
     <Copyright>Copyright © 2020-2023 Red Centre Software</Copyright>
-    <IsPackable>false</IsPackable>
+    <IsPackable>true</IsPackable>
+    <PackageTags>redcentre;Red Centre Software;cross tabulation;crosstab</PackageTags>
+    <PackageReleaseNotes>Example code by Red Centre Software https://github.com/redcentre/Carbon.Examples.Licensing.Provider/</PackageReleaseNotes>
+    <PackageOutputPath>S:\Nuget\redcentre</PackageOutputPath>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <SignAssembly>true</SignAssembly>
+    <AssemblyOriginatorKeyFile>..\RCS.Carbon.Licensing.Example.snk</AssemblyOriginatorKeyFile>
+    <PackageIcon>RCS.Carbon.Licensing.Example.png</PackageIcon>
   </PropertyGroup>
 
   <ItemGroup>
@@ -24,6 +34,8 @@
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
+    <PackageReference Include="RCS.Carbon.Licensing.Shared" Version="8.5.19" />
+    <PackageReference Include="RCS.Carbon.Shared" Version="8.5.19" />
     <PackageReference Include="System.Linq.Async" Version="6.0.1" />
   </ItemGroup>
 
@@ -32,8 +44,15 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\..\Carbon\Solution\RCS.Carbon.Licensing.Shared\RCS.Carbon.Licensing.Shared.csproj" />
-    <ProjectReference Include="..\..\..\Carbon\Solution\RCS.Carbon.Shared\RCS.Carbon.Shared.csproj" />
+    <None Include="RCS.Carbon.Licensing.Example.png" Pack="true" PackagePath="\" />
+    <None Include="..\README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Update="RCS.Carbon.Licensing.Example.png">
+      <Pack>True</Pack>
+      <PackagePath>\</PackagePath>
+    </None>
   </ItemGroup>
 
 </Project>
