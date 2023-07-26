@@ -3,9 +3,12 @@ using System.Collections.Generic;
 using System.ComponentModel;
 using System.ComponentModel.DataAnnotations;
 using System.Diagnostics;
+using System.IO;
 using System.Linq;
 using System.Reflection;
+using System.Reflection.PortableExecutable;
 using System.Security.Cryptography;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Xml.Linq;
 using Azure.Storage.Blobs;
@@ -601,15 +604,15 @@ public class ExampleLicensingProvider : ILicensingProvider
 		row.PassHash = user.PassHash ?? HP(user.Psw, user.Uid);
 		row.Email = user.Email;
 		row.EntityId = user.EntityId;
-		row.CloudCustomerNames = user.CloudCustomerNames.Length > 0 ? string.Join(" ", user.CloudCustomerNames) : null;
-		row.JobNames = user.JobNames.Length > 0 ? string.Join(" ", user.JobNames) : null;
-		row.VartreeNames = user.VartreeNames.Length > 0 ? string.Join(" ", user.VartreeNames) : null;
-		row.DashboardNames = user.DashboardNames.Length > 0 ? string.Join(" ", user.DashboardNames) : null;
+		row.CloudCustomerNames = user.CloudCustomerNames?.Length > 0 ? string.Join(" ", user.CloudCustomerNames) : null;
+		row.JobNames = user.JobNames?.Length > 0 ? string.Join(" ", user.JobNames) : null;
+		row.VartreeNames = user.VartreeNames?.Length > 0 ? string.Join(" ", user.VartreeNames) : null;
+		row.DashboardNames = user.DashboardNames?.Length > 0 ? string.Join(" ", user.DashboardNames) : null;
 		row.DataLocation = (int?)user.DataLocation;
 		row.Sequence = user.Sequence;
 		row.Uid = user.Uid;
 		row.Comment = user.Comment;
-		row.Roles = user.Roles.Length > 0 ? string.Join(" ", user.Roles) : null;
+		row.Roles = user.Roles?.Length > 0 ? string.Join(" ", user.Roles) : null;
 		row.Filter = user.Filter;
 		row.LoginMacs = user.LoginMacs;
 		row.LoginCount = user.LoginCount;
@@ -708,6 +711,97 @@ public class ExampleLicensingProvider : ILicensingProvider
 	{
 		var cust = await context.Users.AsNoTracking().Include(c => c.Customers).Include(c => c.Jobs).FirstOrDefaultAsync(c => c.Id == userId).ConfigureAwait(false);
 		return ToUser(cust, true);
+	}
+
+	#endregion
+
+	#region Job Upload
+
+	sealed record UploadData(int JobId, string JobName, string StorageConnect, DirectoryInfo SourceDirectory, IProgress<string> Progress)
+	{
+		public int UploadId { get; } = Random.Shared.Next();
+		public DateTime StartTime { get; } = DateTime.UtcNow;
+		public DateTime? EndTime { get; set; }
+		public int UploadCount { get; set; }
+		public long UploadBytes { get; set; }
+		public bool IsRunning { get; set; }
+		public Exception? Error { get; set; }
+		public CancellationTokenSource CTS { get; } = new CancellationTokenSource();
+	}
+
+	readonly List<UploadData> uploadList = new();
+
+	public async Task<int> StartJobUpload(string jobId, DirectoryInfo sourceDirectory, IProgress<string> progress)
+	{
+		int jobid = int.Parse(jobId);
+		if (uploadList.Any(u => u.JobId == jobid && u.IsRunning)) throw new CarbonException(666, $"Job Id {jobId} already has an upload running");
+		using var context = MakeContext();
+		var job = await context.Jobs.AsNoTracking().Include(j => j.Customer).FirstOrDefaultAsync(j => j.Id == jobid);
+		if (job == null) throw new CarbonException(666, $"Job Id {jobId} does not exist for upload");
+		if (job.CustomerId == null) throw new CarbonException(666, $"Job Id {jobId} does not have a parent customer");
+		var data = new UploadData(job.Id, job.Name, job.Customer.StorageKey, sourceDirectory, progress);
+		uploadList.Add(data);
+		var thread = new Thread(new ParameterizedThreadStart(UploadProc!));
+		thread.Start(data);
+		return data.UploadId;
+	}
+
+	async void UploadProc(object o)
+	{
+		var data = (UploadData)o;
+		int totalFiles = 0;
+		long totalBytes = 0L;
+		data.IsRunning = true;
+		var cc = new BlobContainerClient(data.StorageConnect, data.JobName);
+		await cc.CreateIfNotExistsAsync();
+		var source = data.SourceDirectory.EnumerateFiles("*", new EnumerationOptions() { RecurseSubdirectories = true });
+		var po = new ParallelOptions() { CancellationToken = data.CTS.Token, MaxDegreeOfParallelism = Math.Min(4, Environment.ProcessorCount) };
+		try
+		{
+			await Parallel.ForEachAsync(source, po, async (f, t) =>
+			{
+				using (var reader = new FileStream(f.FullName, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
+				{
+					Interlocked.Increment(ref totalFiles);
+					data.Progress.Report($"Start {totalFiles} {f.FullName} [{f.Length}]");
+					//await cc.UploadBlobAsync("blobname", reader, data.CTS.Token);
+					await Task.Delay(Random.Shared.Next(200, 2000), t);    //#### TESTING
+					Interlocked.Add(ref totalBytes, reader.Length);
+					data.Progress.Report($"End   {totalFiles} {f.FullName}");
+				}
+			});
+		}
+		catch (Exception ex)
+		{
+			data.Error = ex;
+		}
+		//IEnumerable<Task> tasks = source.Select(async f =>
+		//{
+		//	using (var reader = new FileStream(f.FullName, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
+		//	{
+		//		data.Progress.Report($"Start {f.FullName} [{f.Length}]");
+		//		//await cc.UploadBlobAsync("blobname", reader, data.CTS.Token);
+		//		await Task.Delay(Random.Shared.Next(200, 2000));    //#### TESTING
+		//		Interlocked.Increment(ref totalFiles);
+		//		Interlocked.Add(ref totalBytes, reader.Length);
+		//		data.Progress.Report($"End   {f.FullName}");
+		//	}
+		//});
+		//await Task.WhenAll(tasks);
+		data.UploadCount = totalFiles;
+		data.UploadBytes = totalBytes;
+		data.EndTime = DateTime.UtcNow;
+		data.IsRunning = false;
+		Trace.WriteLine($"#### {totalFiles} {totalBytes}");
+		data.Progress.Report("END");	// TODO How to indicate upload end?
+	}
+
+	public bool CancelUpload(int uploadId)
+	{
+		var data = uploadList.FirstOrDefault(x => x.UploadId == uploadId && x.IsRunning);
+		if (data == null) return false;
+		data.CTS.Cancel();
+		return true;
 	}
 
 	#endregion
