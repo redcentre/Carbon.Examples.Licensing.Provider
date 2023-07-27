@@ -6,7 +6,6 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Reflection;
-using System.Reflection.PortableExecutable;
 using System.Security.Cryptography;
 using System.Threading;
 using System.Threading.Tasks;
@@ -17,6 +16,8 @@ using Microsoft.EntityFrameworkCore;
 using RCS.Carbon.Licensing.Example.EFCore;
 using RCS.Carbon.Licensing.Shared;
 using RCS.Carbon.Shared;
+using static Azure.Core.HttpHeader;
+
 
 #nullable enable
 
@@ -755,45 +756,52 @@ public class ExampleLicensingProvider : ILicensingProvider
 		var cc = new BlobContainerClient(data.StorageConnect, data.JobName);
 		await cc.CreateIfNotExistsAsync();
 		var source = data.SourceDirectory.EnumerateFiles("*", new EnumerationOptions() { RecurseSubdirectories = true });
+		int sourcePfxLen = data.SourceDirectory.FullName.Length + 1;
 		var po = new ParallelOptions() { CancellationToken = data.CTS.Token, MaxDegreeOfParallelism = Math.Min(4, Environment.ProcessorCount) };
 		try
 		{
 			await Parallel.ForEachAsync(source, po, async (f, t) =>
 			{
+				string? fixname = UpFileFilter(f.FullName);
+				if (fixname == null) return;
+				string blobname = fixname[sourcePfxLen..].Replace(Path.DirectorySeparatorChar, '/');
 				using (var reader = new FileStream(f.FullName, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
 				{
 					Interlocked.Increment(ref totalFiles);
-					data.Progress.Report($"Start {totalFiles} {f.FullName} [{f.Length}]");
-					//await cc.UploadBlobAsync("blobname", reader, data.CTS.Token);
-					await Task.Delay(Random.Shared.Next(200, 2000), t);    //#### TESTING
+					data.Progress.Report($"Start {totalFiles} {blobname} [{f.Length}]");
+					var bc = cc.GetBlobClient(blobname);
+					await bc.UploadAsync(reader, true, data.CTS.Token);
 					Interlocked.Add(ref totalBytes, reader.Length);
-					data.Progress.Report($"End   {totalFiles} {f.FullName}");
 				}
 			});
 		}
 		catch (Exception ex)
 		{
 			data.Error = ex;
+			data.Progress.Report($"ERROR {ex.Message}");
 		}
-		//IEnumerable<Task> tasks = source.Select(async f =>
-		//{
-		//	using (var reader = new FileStream(f.FullName, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
-		//	{
-		//		data.Progress.Report($"Start {f.FullName} [{f.Length}]");
-		//		//await cc.UploadBlobAsync("blobname", reader, data.CTS.Token);
-		//		await Task.Delay(Random.Shared.Next(200, 2000));    //#### TESTING
-		//		Interlocked.Increment(ref totalFiles);
-		//		Interlocked.Add(ref totalBytes, reader.Length);
-		//		data.Progress.Report($"End   {f.FullName}");
-		//	}
-		//});
-		//await Task.WhenAll(tasks);
 		data.UploadCount = totalFiles;
 		data.UploadBytes = totalBytes;
 		data.EndTime = DateTime.UtcNow;
 		data.IsRunning = false;
-		Trace.WriteLine($"#### {totalFiles} {totalBytes}");
-		data.Progress.Report("END");	// TODO How to indicate upload end?
+		data.Progress.Report($"END Upload files: {totalFiles} • Uploaded bytes: {totalBytes}");	// TODO How to indicate upload end?
+	}
+
+	readonly static string[] Excludes = new string[]
+	{
+		@".vs\", @".git\", @"bin\", @"obj\", @"release\", @"debug\", @"packages\"
+	};
+
+	static string? UpFileFilter(string fullname)
+	{
+		if (Excludes.Any(x => fullname.Contains(x, StringComparison.OrdinalIgnoreCase))) return null;
+		if (fullname.Contains(@"\CaseData\", StringComparison.OrdinalIgnoreCase))
+		{
+			string lowname = Path.GetFileName(fullname).ToLowerInvariant();
+			string path = Path.GetDirectoryName(fullname)!;
+			return Path.Combine(path, lowname);
+		}
+		return fullname;
 	}
 
 	public bool CancelUpload(int uploadId)
