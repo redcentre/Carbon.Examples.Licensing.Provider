@@ -5,7 +5,9 @@ using System.ComponentModel.DataAnnotations;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Net.Http;
 using System.Reflection;
+using System.Reflection.PortableExecutable;
 using System.Security.Cryptography;
 using System.Threading;
 using System.Threading.Tasks;
@@ -31,6 +33,7 @@ public class ExampleLicensingProvider : ILicensingProvider
 {
 	readonly string? _connect;
 	const string GuestAccountName = "guest";
+	string mimeurl = "https://systemrcs.blob.core.windows.net/reference/mime-types.xml";
 
 	[Description("Example licensing provider using a SQL Server database")]
 	public ExampleLicensingProvider(
@@ -731,9 +734,19 @@ public class ExampleLicensingProvider : ILicensingProvider
 	}
 
 	readonly List<UploadData> uploadList = new();
+	XDocument mimedoc;
+	const int MaxParallelUploads = 4;
 
 	public async Task<int> StartJobUpload(string jobId, DirectoryInfo sourceDirectory, IProgress<string> progress)
 	{
+		if (mimedoc == null)
+		{
+			using (var client = new HttpClient())
+			{
+				string xml = await client.GetStringAsync(mimeurl);
+				mimedoc = XDocument.Parse(xml);
+			}
+		}
 		int jobid = int.Parse(jobId);
 		if (uploadList.Any(u => u.JobId == jobid && u.IsRunning)) throw new CarbonException(666, $"Job Id {jobId} already has an upload running");
 		using var context = MakeContext();
@@ -750,14 +763,18 @@ public class ExampleLicensingProvider : ILicensingProvider
 	async void UploadProc(object o)
 	{
 		var data = (UploadData)o;
-		int totalFiles = 0;
+		data.Progress.Report($"START|{MaxParallelUploads}|{data.JobId}|{data.JobName}|{data.SourceDirectory.FullName}");
+		int blobSeq = 0;
 		long totalBytes = 0L;
+		byte[] readbuff = new byte[256];
+		byte[] NonTextBytes = Enumerable.Range(0, 31).Except(new int[] { 9, 10, 13 }).Select(e => (byte)e).ToArray();
 		data.IsRunning = true;
 		var cc = new BlobContainerClient(data.StorageConnect, data.JobName);
 		await cc.CreateIfNotExistsAsync();
 		var source = data.SourceDirectory.EnumerateFiles("*", new EnumerationOptions() { RecurseSubdirectories = true });
 		int sourcePfxLen = data.SourceDirectory.FullName.Length + 1;
-		var po = new ParallelOptions() { CancellationToken = data.CTS.Token, MaxDegreeOfParallelism = Math.Min(4, Environment.ProcessorCount) };
+		// Arbitrary maximum parallel upload limit is 4
+		var po = new ParallelOptions() { CancellationToken = data.CTS.Token, MaxDegreeOfParallelism = Math.Min(MaxParallelUploads, Environment.ProcessorCount) };
 		try
 		{
 			await Parallel.ForEachAsync(source, po, async (f, t) =>
@@ -767,10 +784,26 @@ public class ExampleLicensingProvider : ILicensingProvider
 				string blobname = fixname[sourcePfxLen..].Replace(Path.DirectorySeparatorChar, '/');
 				using (var reader = new FileStream(f.FullName, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
 				{
-					Interlocked.Increment(ref totalFiles);
-					data.Progress.Report($"Start {totalFiles} {blobname} [{f.Length}]");
+					Interlocked.Increment(ref blobSeq);
+					data.Progress.Report($"UPLOAD|{blobSeq}|{blobname}|{f.Length}");
+					#region ----- Calculate the mime-type -----
+					XElement? extelem = mimedoc.Root!.Elements("type").SelectMany(e => e.Elements("ext")).FirstOrDefault(e => string.Compare((string)e, f.Extension, StringComparison.OrdinalIgnoreCase) == 0);
+					string? mimetype = (string?)extelem?.Parent!.Attribute("name");
+					if (mimetype == null)
+					{
+						int len = reader.Read(readbuff, 0, readbuff.Length);
+						bool isbinary = readbuff.Take(len).Any(b => NonTextBytes.Contains(b));
+						mimetype = isbinary ? "application/octet-stream" : "text/plain";
+						reader.Position = 0L;
+					}
+					#endregion --------------------------------
+					var upopts = new BlobUploadOptions()
+					{
+						Conditions = null,
+						HttpHeaders = new BlobHttpHeaders() { ContentType = mimetype }
+					};
 					var bc = cc.GetBlobClient(blobname);
-					await bc.UploadAsync(reader, true, data.CTS.Token);
+					await bc.UploadAsync(reader, upopts, data.CTS.Token);
 					Interlocked.Add(ref totalBytes, reader.Length);
 				}
 			});
@@ -778,13 +811,14 @@ public class ExampleLicensingProvider : ILicensingProvider
 		catch (Exception ex)
 		{
 			data.Error = ex;
-			data.Progress.Report($"ERROR {ex.Message}");
+			data.Progress.Report($"ERROR|{ex.Message}");
 		}
-		data.UploadCount = totalFiles;
+		data.UploadCount = blobSeq;
 		data.UploadBytes = totalBytes;
 		data.EndTime = DateTime.UtcNow;
 		data.IsRunning = false;
-		data.Progress.Report($"END Upload files: {totalFiles} • Uploaded bytes: {totalBytes}");	// TODO How to indicate upload end?
+		var secs = data.EndTime.Value.Subtract(data.StartTime).TotalSeconds;
+		data.Progress.Report($"END|{blobSeq}|{totalBytes}|{secs:F1}");
 	}
 
 	readonly static string[] Excludes = new string[]
