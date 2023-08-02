@@ -8,6 +8,7 @@ using System.Linq;
 using System.Net.Http;
 using System.Reflection;
 using System.Security.Cryptography;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Xml.Linq;
@@ -18,7 +19,6 @@ using Microsoft.EntityFrameworkCore;
 using RCS.Carbon.Licensing.Example.EFCore;
 using RCS.Carbon.Licensing.Shared;
 using RCS.Carbon.Shared;
-
 
 #nullable enable
 
@@ -33,6 +33,19 @@ public class ExampleLicensingProvider : ILicensingProvider
 	readonly string? _connect;
 	const string GuestAccountName = "guest";
 	const string MimeUrl = "https://systemrcs.blob.core.windows.net/reference/mime-types.xml";
+	const int MaxParallelUploads = 4;
+	const string MimeBinary = "application/octet-stream";
+	const string MimeText = "text/plain";
+	readonly static string[] Excludes = new string[]	// TODO The upload ignores must come from the caller
+	{
+		@".vs\", @".git\", @"bin\", @"obj\", @"release\", @"debug\", @"packages\"
+	};
+	readonly static string[] LowerDirs = new string[]
+	{
+		@"\CaseData\", @"\Specs\"
+	};
+	readonly Decoder utf8dec = Encoding.UTF8.GetDecoder();
+	readonly char[] NonTextChars = Enumerable.Range(0, 31).Except(new int[] { 9, 10, 13 }).Select(e => (char)e).ToArray();
 
 	[Description("Example licensing provider using a SQL Server database")]
 	public ExampleLicensingProvider(
@@ -42,10 +55,6 @@ public class ExampleLicensingProvider : ILicensingProvider
 	)
 	{
 		_connect = adoConnectionString ?? throw new ArgumentNullException(nameof(adoConnectionString));
-	}
-
-	public void Dispose()
-	{
 	}
 
 	public string Name => "Example Licensing Provider";
@@ -591,7 +600,7 @@ public class ExampleLicensingProvider : ILicensingProvider
 			{
 				Id = Random.Shared.Next(10_000_000, 20_000_000),
 				Uid = uid,
-				Psw = null,		// The plaintext password might be needed for legacy usage, but avoid like the plague.
+				Psw = null,     // The plaintext password might be needed for legacy usage, but avoid like the plague.
 				PassHash = user.PassHash ?? HP(user.Psw, uid),
 				Created = DateTime.UtcNow
 			};
@@ -734,17 +743,14 @@ public class ExampleLicensingProvider : ILicensingProvider
 
 	readonly List<UploadData> uploadList = new();
 	XDocument mimedoc;
-	const int MaxParallelUploads = 4;
 
 	public async Task<int> StartJobUpload(string jobId, DirectoryInfo sourceDirectory, IProgress<string> progress)
 	{
 		if (mimedoc == null)
 		{
-			using (var client = new HttpClient())
-			{
-				string xml = await client.GetStringAsync(MimeUrl);
-				mimedoc = XDocument.Parse(xml);
-			}
+			using var client = new HttpClient();
+			string xml = await client.GetStringAsync(MimeUrl);
+			mimedoc = XDocument.Parse(xml);
 		}
 		int jobid = int.Parse(jobId);
 		if (uploadList.Any(u => u.JobId == jobid && u.IsRunning)) throw new CarbonException(666, $"Job Id {jobId} already has an upload running");
@@ -759,14 +765,18 @@ public class ExampleLicensingProvider : ILicensingProvider
 		return data.UploadId;
 	}
 
+	const int TasteLength = 256;
+	char[] cbuff;
+	byte[] readbuff;
+
 	async void UploadProc(object o)
 	{
+		readbuff ??= new byte[TasteLength];
+		cbuff ??= new char[TasteLength];
 		var data = (UploadData)o;
 		data.Progress.Report($"START|{MaxParallelUploads}|{data.JobId}|{data.JobName}|{data.SourceDirectory.FullName}");
 		int blobSeq = 0;
 		long totalBytes = 0L;
-		byte[] readbuff = new byte[256];
-		byte[] NonTextBytes = Enumerable.Range(0, 31).Except(new int[] { 9, 10, 13 }).Select(e => (byte)e).ToArray();
 		data.IsRunning = true;
 		var cc = new BlobContainerClient(data.StorageConnect, data.JobName);
 		await cc.CreateIfNotExistsAsync();
@@ -781,30 +791,54 @@ public class ExampleLicensingProvider : ILicensingProvider
 				string? fixname = UpFileFilter(f.FullName);
 				if (fixname == null) return;
 				string blobname = fixname[sourcePfxLen..].Replace(Path.DirectorySeparatorChar, '/');
-				using (var reader = new FileStream(f.FullName, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
+				using var reader = new FileStream(f.FullName, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+				Interlocked.Increment(ref blobSeq);
+				data.Progress.Report($"UPLOAD|{blobSeq}|{blobname}|{f.Length}");
+				#region ----- Calculate the mime-type -----
+				// Lookup the extension in the public XML document, then fallback to a slightly
+				// clumsy probe of the bytes at the start of the file to see if contains a well-known
+				// BOM or if it contains any controls characters not in text files.
+				XElement? extelem = mimedoc.Root!.Elements("type").SelectMany(e => e.Elements("ext")).FirstOrDefault(e => string.Compare((string)e, f.Extension, StringComparison.OrdinalIgnoreCase) == 0);
+				string? mimetype = (string?)extelem?.Parent!.Attribute("name");
+				if (mimetype == null)
 				{
-					Interlocked.Increment(ref blobSeq);
-					data.Progress.Report($"UPLOAD|{blobSeq}|{blobname}|{f.Length}");
-					#region ----- Calculate the mime-type -----
-					XElement? extelem = mimedoc.Root!.Elements("type").SelectMany(e => e.Elements("ext")).FirstOrDefault(e => string.Compare((string)e, f.Extension, StringComparison.OrdinalIgnoreCase) == 0);
-					string? mimetype = (string?)extelem?.Parent!.Attribute("name");
-					if (mimetype == null)
+					// Fallback inspection of bytes
+					int len = reader.Read(readbuff, 0, readbuff.Length);
+					bool isBigend = len >= 2 && readbuff[0] == 0xfe && readbuff[1] == 0xff;
+					bool isLitlend = len >= 2 && readbuff[0] == 0xff && readbuff[1] == 0xfe;
+					bool isUtf8 = len >= 3 && readbuff[0] == 0xef && readbuff[1] == 0xbb && readbuff[2] == 0xbf;
+					if (isBigend || isLitlend || isUtf8)
 					{
-						int len = reader.Read(readbuff, 0, readbuff.Length);
-						bool isbinary = readbuff.Take(len).Any(b => NonTextBytes.Contains(b));
-						mimetype = isbinary ? "application/octet-stream" : "text/plain";
-						reader.Position = 0L;
+						// One of the mostpopular BOMs is found for a text file.
+						mimetype = MimeText;
 					}
-					#endregion --------------------------------
-					var upopts = new BlobUploadOptions()
+					else
 					{
-						Conditions = null,
-						HttpHeaders = new BlobHttpHeaders() { ContentType = mimetype }
-					};
-					var bc = cc.GetBlobClient(blobname);
-					await bc.UploadAsync(reader, upopts, data.CTS.Token);
-					Interlocked.Add(ref totalBytes, reader.Length);
+						// Last resort is a fuzzy check of some bytes
+						try
+						{
+							int ccount = utf8dec.GetChars(readbuff.AsSpan(0, len), cbuff.AsSpan(), true);
+							bool badchars = cbuff.Take(ccount).Any(c => NonTextChars.Contains(c));
+							mimetype = badchars ? MimeBinary : MimeText;
+						}
+						catch (DecoderFallbackException)
+						{
+							mimetype = MimeBinary;
+						}
+						//bool isbinary = readbuff.Take(len).Any(b => NonTextBytes.Contains(b));
+						//mimetype = isbinary ? MimeBinary : MimeText;
+					}
+					reader.Position = 0L;
 				}
+				#endregion --------------------------------
+				var upopts = new BlobUploadOptions()
+				{
+					Conditions = null,
+					HttpHeaders = new BlobHttpHeaders() { ContentType = mimetype }
+				};
+				var bc = cc.GetBlobClient(blobname);
+				await bc.UploadAsync(reader, upopts, data.CTS.Token);
+				Interlocked.Add(ref totalBytes, reader.Length);
 			});
 		}
 		catch (Exception ex)
@@ -820,15 +854,10 @@ public class ExampleLicensingProvider : ILicensingProvider
 		data.Progress.Report($"END|{blobSeq}|{totalBytes}|{secs:F1}");
 	}
 
-	readonly static string[] Excludes = new string[]
-	{
-		@".vs\", @".git\", @"bin\", @"obj\", @"release\", @"debug\", @"packages\"
-	};
-
 	static string? UpFileFilter(string fullname)
 	{
 		if (Excludes.Any(x => fullname.Contains(x, StringComparison.OrdinalIgnoreCase))) return null;
-		if (fullname.Contains(@"\CaseData\", StringComparison.OrdinalIgnoreCase))
+		if (LowerDirs.Any(d => fullname.Contains(d, StringComparison.OrdinalIgnoreCase)))
 		{
 			string lowname = Path.GetFileName(fullname).ToLowerInvariant();
 			string path = Path.GetDirectoryName(fullname)!;
@@ -846,6 +875,8 @@ public class ExampleLicensingProvider : ILicensingProvider
 	}
 
 	#endregion
+
+	#region Azure Comparison
 
 	public async Task<XElement> RunComparison()
 	{
@@ -923,6 +954,8 @@ public class ExampleLicensingProvider : ILicensingProvider
 		}
 
 	}
+
+	#endregion
 
 	#region Row To Entities
 
@@ -1075,10 +1108,10 @@ public class ExampleLicensingProvider : ILicensingProvider
 
 	#endregion
 
-	static byte[]? HP(string psw, Guid uid)
+	static byte[]? HP(string p, Guid u)
 	{
-		if (psw == null) return null;
-		using var deriver = new Rfc2898DeriveBytes(psw, uid.ToByteArray(), 15000, HashAlgorithmName.SHA1);
+		if (p == null) return null;
+		using var deriver = new Rfc2898DeriveBytes(p, u.ToByteArray(), 15000, HashAlgorithmName.SHA1);
 		return deriver.GetBytes(16);
 	}
 
