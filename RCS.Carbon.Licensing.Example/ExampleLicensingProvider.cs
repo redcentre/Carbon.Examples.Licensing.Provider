@@ -45,7 +45,7 @@ public class ExampleLicensingProvider : ILicensingProvider
 		@"\CaseData\", @"\Specs\"
 	};
 	readonly Decoder utf8dec = Encoding.UTF8.GetDecoder();
-	readonly char[] NonTextChars = Enumerable.Range(0, 31).Except(new int[] { 9, 10, 13 }).Select(e => (char)e).ToArray();
+	readonly char[] NonTextChars = Enumerable.Range(0, 32).Except(new int[] { 9, 10, 13 }).Select(e => (char)e).ToArray();
 
 	[Description("Example licensing provider using a SQL Server database")]
 	public ExampleLicensingProvider(
@@ -613,7 +613,7 @@ public class ExampleLicensingProvider : ILicensingProvider
 		row.Name = user.Name;
 		row.ProviderId = user.ProviderId;
 		row.Psw = user.Psw;
-		row.PassHash = user.PassHash ?? HP(user.Psw, user.Uid);
+		row.PassHash = HP(user.Psw, row.Uid);
 		row.Email = user.Email;
 		row.EntityId = user.EntityId;
 		row.CloudCustomerNames = user.CloudCustomerNames?.Length > 0 ? string.Join(" ", user.CloudCustomerNames) : null;
@@ -622,7 +622,6 @@ public class ExampleLicensingProvider : ILicensingProvider
 		row.DashboardNames = user.DashboardNames?.Length > 0 ? string.Join(" ", user.DashboardNames) : null;
 		row.DataLocation = (int?)user.DataLocation;
 		row.Sequence = user.Sequence;
-		row.Uid = user.Uid;
 		row.Comment = user.Comment;
 		row.Roles = user.Roles?.Length > 0 ? string.Join(" ", user.Roles) : null;
 		row.Filter = user.Filter;
@@ -1009,7 +1008,7 @@ public class ExampleLicensingProvider : ILicensingProvider
 					Name = j.Name,
 					DisplayName = j.DisplayName,
 					Description = j.Description,
-					VartreeNames = j.VartreeNames.Split(',')
+					VartreeNames = j.VartreeNames?.Split(',')
 				}).ToArray()
 			}).ToArray()
 		};
