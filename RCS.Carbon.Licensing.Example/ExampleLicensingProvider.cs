@@ -608,7 +608,11 @@ public class ExampleLicensingProvider : ILicensingProvider
 		}
 		else
 		{
-			row = await context.Users.FirstOrDefaultAsync(u => u.Id.ToString() == user.Id) ?? throw new CarbonException(700, $"User Id {user.Id} not found for update");
+			row = await context.Users.FirstAsync(u => u.Id.ToString() == user.Id) ?? throw new CarbonException(700, $"User Id {user.Id} not found for update");
+			if (row.Uid == Guid.Empty)
+			{
+				row.Uid = Guid.NewGuid();
+			}
 		}
 		row.Name = user.Name;
 		row.ProviderId = user.ProviderId;
