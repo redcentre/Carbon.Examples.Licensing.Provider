@@ -758,8 +758,7 @@ public class ExampleLicensingProvider : ILicensingProvider
 		int jobid = int.Parse(jobId);
 		if (uploadList.Any(u => u.JobId == jobid && u.IsRunning)) throw new CarbonException(666, $"Job Id {jobId} already has an upload running");
 		using var context = MakeContext();
-		var job = await context.Jobs.AsNoTracking().Include(j => j.Customer).FirstOrDefaultAsync(j => j.Id == jobid);
-		if (job == null) throw new CarbonException(666, $"Job Id {jobId} does not exist for upload");
+		var job = await context.Jobs.AsNoTracking().Include(j => j.Customer).FirstOrDefaultAsync(j => j.Id == jobid) ?? throw new CarbonException(666, $"Job Id {jobId} does not exist for upload");
 		if (job.CustomerId == null) throw new CarbonException(666, $"Job Id {jobId} does not have a parent customer");
 		var data = new UploadData(job.Id, job.Name, job.Customer.StorageKey, sourceDirectory, progress);
 		uploadList.Add(data);
