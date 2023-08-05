@@ -72,6 +72,8 @@ public partial class User
 
 	public DateTime? Sunset { get; set; }
 
+	public int? MaxJobs { get; set; }
+
 	[StringLength(32)]
 	public string Version { get; set; }
 

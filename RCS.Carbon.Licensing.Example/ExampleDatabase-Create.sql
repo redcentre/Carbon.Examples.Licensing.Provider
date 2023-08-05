@@ -23,6 +23,7 @@ CREATE TABLE [Customer]
 	[Credits] INT NULL,
 	[Spent] INT NULL,
 	[Sunset] DATETIME NULL,
+	[MaxJobs] INT NULL,
 	[Inactive] BIT NOT NULL CONSTRAINT DF_Customer_Inactive DEFAULT 0,
 	[Created] DATETIME NOT NULL CONSTRAINT DF_Customer_Created DEFAULT (GETUTCDATE()),
 	CONSTRAINT [PK_Customer_Id] PRIMARY KEY CLUSTERED ([Id] ASC)
@@ -92,6 +93,10 @@ CREATE TABLE [dbo].[User]
 GO
 CREATE UNIQUE INDEX [IX_User_Name] ON [User] ([Name]);
 GO
+------------------------------------------------------------------------------------------------
+-- The following column was appended to support the Midas project with global RCS licensing
+-- control over how many jobs a Midas login user can create.
+ALTER TABLE [User] ADD [MaxJobs] INT NULL;
 ------------------------------------------------------------------------------------------------
 CREATE TABLE [dbo].[UserCustomer]
 (

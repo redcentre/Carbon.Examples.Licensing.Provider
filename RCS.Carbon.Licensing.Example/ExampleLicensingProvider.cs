@@ -634,6 +634,7 @@ public class ExampleLicensingProvider : ILicensingProvider
 		row.LoginMax = user.LoginMax;
 		row.LastLogin = user.LastLogin;
 		row.Sunset = user.Sunset;
+		row.MaxJobs = user.MaxJobs;
 		row.Version = user.Version;
 		row.MinVersion = user.MinVersion;
 		row.IsDisabled = user.IsDisabled;
@@ -1100,6 +1101,7 @@ public class ExampleLicensingProvider : ILicensingProvider
 			LoginMax = user.LoginMax,
 			LastLogin = user.LastLogin,
 			Sunset = user.Sunset,
+			MaxJobs = user.MaxJobs,
 			Version = user.Version,
 			MinVersion = user.MinVersion,
 			IsDisabled = user.IsDisabled,
