@@ -1,8 +1,8 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <Version>1.0.14</Version>
-    <InformationalVersion>2023-08-05 16:35 GMT+10</InformationalVersion>
+    <Version>1.0.15</Version>
+    <InformationalVersion>2023-08-11 07:06 GMT+10</InformationalVersion>
     <TargetFrameworks>net60</TargetFrameworks>
     <Authors>Red Centre Software</Authors>
     <Company>Red Centre Software</Company>
@@ -28,13 +28,13 @@
 
   <ItemGroup>
     <PackageReference Include="Azure.Storage.Blobs" Version="12.17.0" />
-    <PackageReference Include="Microsoft.EntityFrameworkCore" Version="7.0.9" />
-    <PackageReference Include="Microsoft.EntityFrameworkCore.SqlServer" Version="7.0.9" />
-    <PackageReference Include="Microsoft.EntityFrameworkCore.Tools" Version="7.0.9">
+    <PackageReference Include="Microsoft.EntityFrameworkCore" Version="7.0.10" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.SqlServer" Version="7.0.10" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Tools" Version="7.0.10">
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
-    <PackageReference Include="RCS.Carbon.Licensing.Shared" Version="8.5.26" />
+    <PackageReference Include="RCS.Carbon.Licensing.Shared" Version="8.5.27" />
     <PackageReference Include="RCS.Carbon.Shared" Version="8.5.25" />
     <PackageReference Include="System.Linq.Async" Version="6.0.1" />
   </ItemGroup>

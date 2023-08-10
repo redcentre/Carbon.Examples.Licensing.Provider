@@ -36,10 +36,6 @@ public class ExampleLicensingProvider : ILicensingProvider
 	const int MaxParallelUploads = 4;
 	const string MimeBinary = "application/octet-stream";
 	const string MimeText = "text/plain";
-	readonly static string[] Excludes = new string[]	// TODO The upload ignores must come from the caller
-	{
-		@".vs\", @".git\", @"bin\", @"obj\", @"release\", @"debug\", @"packages\"
-	};
 	readonly static string[] LowerDirs = new string[]
 	{
 		@"\CaseData\", @"\Specs\"
@@ -206,39 +202,6 @@ public class ExampleLicensingProvider : ILicensingProvider
 		};
 	}
 
-	public async Task<XElement> GetNavigationXml()
-	{
-		using var context = MakeContext();
-		var elem = new XElement("Navigation");
-		XElement[] custs = await context.Customers.AsNoTracking().Include(c => c.Users).Include(c => c.Jobs).AsAsyncEnumerable().Select(c => new XElement(nameof(Customer),
-			new XAttribute(nameof(Customer.Id), c.Id),
-			new XElement(nameof(Customer.Name), c.Name), c.DisplayName == null ? null : new XElement(nameof(Customer.DisplayName), c.DisplayName),
-			new XElement(nameof(Customer.Inactive), c.Inactive),
-			new XElement("JobIds", c.Jobs.Select(j => new XElement(nameof(Job.Id), j.Id))),
-			new XElement("UserIds", c.Users.Select(j => new XElement(nameof(User.Id), j.Id)))
-			)).ToArrayAsync().ConfigureAwait(false);
-		XElement[] jobs = await context.Jobs.AsNoTracking().Include(j => j.Users).AsAsyncEnumerable().Select(j => new XElement(nameof(Job),
-			new XAttribute(nameof(Job.Id), j.Id),
-			new XElement(nameof(Job.Name), j.Name), j.DisplayName == null ? null : new XElement(nameof(Customer.DisplayName), j.DisplayName),
-			new XElement(nameof(Customer.Inactive), j.Inactive),
-			j.CustomerId == null ? null : new XElement(nameof(Job.CustomerId), j.CustomerId),
-			new XElement("UserIds", j.Users.Select(u => new XElement(nameof(User.Id), u.Id)))
-		)).ToArrayAsync().ConfigureAwait(false);
-		XElement[] users = await context.Users.AsNoTracking().Include(u => u.Customers).Include(u => u.Jobs).AsAsyncEnumerable().Select(u => new XElement(nameof(User),
-			new XAttribute(nameof(User.Id), u.Id),
-			new XAttribute(nameof(User.Name), u.Name),
-			new XAttribute(nameof(User.IsDisabled), u.IsDisabled),
-			new XElement("CustomerIds", u.Customers.Select(c => new XElement(nameof(Customer.Id), c.Id))),
-			new XElement("JobIds", u.Jobs.Select(j => new XElement(nameof(Job.Id), j.Id)))
-		)).ToArrayAsync().ConfigureAwait(false);
-		elem.Add(
-			new XElement("Customers", custs),
-			new XElement("Jobs", jobs),
-			new XElement("Users", users)
-		);
-		return elem;
-	}
-
 	#endregion
 
 	#region Customer
@@ -277,7 +240,7 @@ public class ExampleLicensingProvider : ILicensingProvider
 		}
 		row.Name = customer.Name;
 		row.DisplayName = customer.DisplayName;
-		row.StorageKey = customer.StorageKey ?? "DefaultEndpointsProtocol=https;AccountName=xxxxxxxxx;AccountKey=ZZZZZZZZZZZZZZZZ;BlobEndpoint=https://xxxxxxxxx.blob.core.windows.net/;";
+		row.StorageKey = customer.StorageKey;
 		row.Comment = customer.Comment;
 		row.CloudCustomerNames = customer.CloudCustomerNames?.Length > 0 ? string.Join(" ", customer.CloudCustomerNames) : null;
 		row.Corporation = customer.Corporation;
@@ -332,6 +295,7 @@ public class ExampleLicensingProvider : ILicensingProvider
 		{
 			job.Customer = null;
 			cust.Jobs.Remove(job);
+			context.Jobs.Remove(job);
 		}
 		foreach (var user in cust.Users.ToArray())
 		{
@@ -451,7 +415,7 @@ public class ExampleLicensingProvider : ILicensingProvider
 						var client = new BlobServiceClient(cust.StorageKey);
 						var cc = client.GetBlobContainerClient(job.Name);
 						Azure.Response<BlobContainerInfo> resp = await cc.CreateIfNotExistsAsync().ConfigureAwait(false);
-						Trace.WriteLine($"Create container '{job.Name}' in customer '{cust.Name}' - {resp.Value.ETag}");
+						Trace.WriteLine($"Create container '{job.Name}' in customer '{cust.Name}' - {resp?.Value.ETag}");
 					}
 					catch (Exception ex)
 					{
@@ -733,22 +697,24 @@ public class ExampleLicensingProvider : ILicensingProvider
 
 	#region Job Upload
 
-	sealed record UploadData(int JobId, string JobName, string StorageConnect, DirectoryInfo SourceDirectory, IProgress<string> Progress)
+	sealed record UploadTData(int JobId, string JobName, string StorageConnect, UploadParameters Parameters, IProgress<string> Progress)
 	{
 		public int UploadId { get; } = Random.Shared.Next();
 		public DateTime StartTime { get; } = DateTime.UtcNow;
 		public DateTime? EndTime { get; set; }
 		public int UploadCount { get; set; }
 		public long UploadBytes { get; set; }
+		public int SkipCount { get; set; }
+		public long SkipBytes { get; set; }
 		public bool IsRunning { get; set; }
 		public Exception? Error { get; set; }
 		public CancellationTokenSource CTS { get; } = new CancellationTokenSource();
 	}
 
-	readonly List<UploadData> uploadList = new();
+	readonly List<UploadTData> uploadList = new();
 	XDocument mimedoc;
 
-	public async Task<int> StartJobUpload(string jobId, DirectoryInfo sourceDirectory, IProgress<string> progress)
+	public async Task<int> StartJobUpload(UploadParameters parameters, IProgress<string> progress)
 	{
 		if (mimedoc == null)
 		{
@@ -756,12 +722,12 @@ public class ExampleLicensingProvider : ILicensingProvider
 			string xml = await client.GetStringAsync(MimeUrl);
 			mimedoc = XDocument.Parse(xml);
 		}
-		int jobid = int.Parse(jobId);
-		if (uploadList.Any(u => u.JobId == jobid && u.IsRunning)) throw new CarbonException(666, $"Job Id {jobId} already has an upload running");
+		int jobid = int.Parse(parameters.JobId);
+		if (uploadList.Any(u => u.JobId == jobid && u.IsRunning)) throw new CarbonException(666, $"Job Id {parameters.JobId} already has an upload running");
 		using var context = MakeContext();
-		var job = await context.Jobs.AsNoTracking().Include(j => j.Customer).FirstOrDefaultAsync(j => j.Id == jobid) ?? throw new CarbonException(666, $"Job Id {jobId} does not exist for upload");
-		if (job.CustomerId == null) throw new CarbonException(666, $"Job Id {jobId} does not have a parent customer");
-		var data = new UploadData(job.Id, job.Name, job.Customer.StorageKey, sourceDirectory, progress);
+		var job = await context.Jobs.AsNoTracking().Include(j => j.Customer).FirstOrDefaultAsync(j => j.Id == jobid) ?? throw new CarbonException(666, $"Job Id {parameters.JobId} does not exist for upload");
+		if (job.CustomerId == null) throw new CarbonException(666, $"Job Id {parameters.JobId} does not have a parent customer");
+		var data = new UploadTData(job.Id, job.Name, job.Customer.StorageKey, parameters, progress);
 		uploadList.Add(data);
 		var thread = new Thread(new ParameterizedThreadStart(UploadProc!));
 		thread.Start(data);
@@ -771,32 +737,80 @@ public class ExampleLicensingProvider : ILicensingProvider
 	const int TasteLength = 256;
 	char[] cbuff;
 	byte[] readbuff;
+	sealed record BlobTup(string Name, long Bytes, DateTime Modified);
 
 	async void UploadProc(object o)
 	{
 		readbuff ??= new byte[TasteLength];
 		cbuff ??= new char[TasteLength];
-		var data = (UploadData)o;
-		data.Progress.Report($"START|{MaxParallelUploads}|{data.JobId}|{data.JobName}|{data.SourceDirectory.FullName}");
-		int blobSeq = 0;
-		long totalBytes = 0L;
+		var data = (UploadTData)o;
+		DirectoryInfo[] dirs = data.Parameters.Sources.OfType<DirectoryInfo>().ToArray();
+		FileInfo[] files = data.Parameters.Sources.OfType<FileInfo>().ToArray();
+		DirectoryInfo? sourceRoot = dirs.FirstOrDefault()?.Parent ?? files.FirstOrDefault()?.Directory;
+		int sourceRootPfxLen = sourceRoot!.FullName.Length + 1;
+		data.Progress.Report($"START|{MaxParallelUploads}|{data.JobId}|{data.JobName}|{sourceRoot!.FullName}");
+		int uploadCount = 0;
+		long uploadBytes = 0L;
+		int skipCount = 0;
+		long skipBytes = 0L;
 		data.IsRunning = true;
 		var cc = new BlobContainerClient(data.StorageConnect, data.JobName);
 		await cc.CreateIfNotExistsAsync();
-		var source = data.SourceDirectory.EnumerateFiles("*", new EnumerationOptions() { RecurseSubdirectories = true });
-		int sourcePfxLen = data.SourceDirectory.FullName.Length + 1;
+		List<BlobTup>? tuplist = null;
+		if (data.Parameters.NewAndChangedOnly)
+		{
+			// Build a set of all blobs for new/change testing.
+			DateTime now = DateTime.Now;
+			tuplist = new List<BlobTup>();
+			string? token = null;
+			do
+			{
+				IAsyncEnumerable<Page<BlobItem>> pages = cc.GetBlobsAsync().AsPages(token);
+				await foreach (Page<BlobItem> page in pages)
+				{
+					foreach (BlobItem blob in page.Values)
+					{
+						//Console.WriteLine($"{blob.Name} {blob.Properties.ContentLength}");
+						tuplist.Add(new BlobTup(blob.Name, blob.Properties.ContentLength!.Value, blob.Properties.LastModified!.Value.UtcDateTime));
+					}
+					token = page.ContinuationToken;
+				}
+			}
+			while (token?.Length > 0);
+			double listsecs = DateTime.Now.Subtract(now).TotalSeconds;
+			data.Progress.Report($"BLOBLIST|{tuplist.Count}|{listsecs:F2}");
+		}
+		// Build the source enumerables
+		var diropts = new EnumerationOptions() { RecurseSubdirectories = true };
+		var dirsources = files.Concat(dirs
+			.Select(d => d.EnumerateFiles("*", diropts))
+			.Aggregate((src, collect) => src.Concat(collect)));
+
 		// Arbitrary maximum parallel upload limit is 4
 		var po = new ParallelOptions() { CancellationToken = data.CTS.Token, MaxDegreeOfParallelism = Math.Min(MaxParallelUploads, Environment.ProcessorCount) };
 		try
 		{
-			await Parallel.ForEachAsync(source, po, async (f, t) =>
+			await Parallel.ForEachAsync(dirsources, po, async (f, t) =>
 			{
-				string? fixname = UpFileFilter(f.FullName);
-				if (fixname == null) return;
-				string blobname = fixname[sourcePfxLen..].Replace(Path.DirectorySeparatorChar, '/');
+				string fixname = NameAdjust(f.FullName);
+				string blobname = fixname[sourceRootPfxLen..].Replace(Path.DirectorySeparatorChar, '/');
+				if (tuplist != null)
+				{
+					// A new/change test is required for blob and file
+					var tup = tuplist.FirstOrDefault(t => t.Name == blobname);
+					if (tup != null)
+					{
+						if (f.LastWriteTimeUtc <= tup.Modified)
+						{
+							Interlocked.Increment(ref skipCount);
+							Interlocked.Add(ref skipBytes, f.Length);
+							data.Progress.Report($"SKIP|{blobname}|{f.Length}|{f.LastWriteTimeUtc:s}|{tup.Modified:s}");
+							return;
+						}
+					}
+				}
 				using var reader = new FileStream(f.FullName, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
-				Interlocked.Increment(ref blobSeq);
-				data.Progress.Report($"UPLOAD|{blobSeq}|{blobname}|{f.Length}");
+				data.Progress.Report($"UPLOAD|{blobname}|{f.Length}");
 				#region ----- Calculate the mime-type -----
 				// Lookup the extension in the public XML document, then fallback to a slightly
 				// clumsy probe of the bytes at the start of the file to see if contains a well-known
@@ -812,7 +826,7 @@ public class ExampleLicensingProvider : ILicensingProvider
 					bool isUtf8 = len >= 3 && readbuff[0] == 0xef && readbuff[1] == 0xbb && readbuff[2] == 0xbf;
 					if (isBigend || isLitlend || isUtf8)
 					{
-						// One of the mostpopular BOMs is found for a text file.
+						// One of the most popular BOMs is found for a text file.
 						mimetype = MimeText;
 					}
 					else
@@ -841,7 +855,8 @@ public class ExampleLicensingProvider : ILicensingProvider
 				};
 				var bc = cc.GetBlobClient(blobname);
 				await bc.UploadAsync(reader, upopts, data.CTS.Token);
-				Interlocked.Add(ref totalBytes, reader.Length);
+				Interlocked.Increment(ref uploadCount);
+				Interlocked.Add(ref uploadBytes, reader.Length);
 			});
 		}
 		catch (Exception ex)
@@ -849,17 +864,16 @@ public class ExampleLicensingProvider : ILicensingProvider
 			data.Error = ex;
 			data.Progress.Report($"ERROR|{ex.Message}");
 		}
-		data.UploadCount = blobSeq;
-		data.UploadBytes = totalBytes;
+		data.UploadCount = uploadCount;
+		data.UploadBytes = uploadBytes;
 		data.EndTime = DateTime.UtcNow;
 		data.IsRunning = false;
 		var secs = data.EndTime.Value.Subtract(data.StartTime).TotalSeconds;
-		data.Progress.Report($"END|{blobSeq}|{totalBytes}|{secs:F1}");
+		data.Progress.Report($"END|{uploadCount}|{uploadBytes}|{skipCount}|{skipBytes}|{secs:F1}");
 	}
 
-	static string? UpFileFilter(string fullname)
+	static string NameAdjust(string fullname)
 	{
-		if (Excludes.Any(x => fullname.Contains(x, StringComparison.OrdinalIgnoreCase))) return null;
 		if (LowerDirs.Any(d => fullname.Contains(d, StringComparison.OrdinalIgnoreCase)))
 		{
 			string lowname = Path.GetFileName(fullname).ToLowerInvariant();
@@ -889,7 +903,7 @@ public class ExampleLicensingProvider : ILicensingProvider
 		await foreach (var cust in context.Customers.AsNoTracking().Include(c => c.Jobs).AsAsyncEnumerable())
 		{
 			var conlist = new List<BlobContainerItem>();
-			var celem = new XElement("Customer", new XAttribute("Name", cust.Name));
+			var celem = new XElement("Customer", new XAttribute("Id", cust.Id), new XAttribute("Name", cust.Name));
 			elem.Add(celem);
 			try
 			{
@@ -898,7 +912,7 @@ public class ExampleLicensingProvider : ILicensingProvider
 				string? token = null;
 				do
 				{
-					var pages = client.GetBlobContainersAsync(traits: BlobContainerTraits.Metadata).AsPages(token);
+					var pages = client.GetBlobContainersAsync().AsPages(token);
 					await foreach (Azure.Page<BlobContainerItem> page in pages)
 					{
 						foreach (BlobContainerItem con in page.Values)
@@ -955,7 +969,6 @@ public class ExampleLicensingProvider : ILicensingProvider
 				while (token?.Length > 0);
 			}
 		}
-
 	}
 
 	#endregion
