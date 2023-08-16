@@ -202,6 +202,23 @@ public class ExampleLicensingProvider : ILicensingProvider
 		};
 	}
 
+	public async Task<ReportItem[]> GetDatabaseReport()
+	{
+		using var context = MakeContext();
+		var list = new List<ReportItem>();
+		var custs = await context.Customers.AsNoTracking().Include(c => c.Jobs).Where(c => c.Jobs.Count == 0).ToArrayAsync();
+		foreach (var cust in custs)
+		{
+			list.Add(new ReportItem(1, cust.Id.ToString(), null, null, $"Customer '{cust.Name}' has no jobs"));
+		}
+		var users = await context.Users.AsNoTracking().Include(u => u.Customers).Include(u => u.Jobs).Where(u => u.Customers.Count == 0 && u.Jobs.Count == 0).ToArrayAsync();
+		foreach (var user in users)
+		{
+			list.Add(new ReportItem(2, null, null, user.Id.ToString(), $"User '{user.Name}' has no customers or jobs"));
+		}
+		return list.ToArray();
+	}
+
 	#endregion
 
 	#region Customer
@@ -305,37 +322,9 @@ public class ExampleLicensingProvider : ILicensingProvider
 		return await context.SaveChangesAsync().ConfigureAwait(false);
 	}
 
-	public async Task<Shared.Entities.Customer?> ConnectCustomerChildJobs(string customerId, string[] jobIds)
-	{
-		int id = int.Parse(customerId);
-		using var context = MakeContext();
-		var cust = await context.Customers.Include(c => c.Jobs).FirstOrDefaultAsync(c => c.Id == id);
-		if (cust == null) return null;
-		var addjobs = context.Jobs.Where(j => jobIds.Contains(j.Id.ToString())).ToArray();
-		foreach (var addjob in addjobs)
-		{
-			cust.Jobs.Add(addjob);
-		}
-		await context.SaveChangesAsync().ConfigureAwait(false);
-		return await RereadCustomer(context, id).ConfigureAwait(false);
-	}
+	public Task<Shared.Entities.Customer?> ConnectCustomerChildJobs(string customerId, string[] jobIds) => throw new Exception($"Changing customer and job relationships is not permitted after they have been created.");
 
-	public async Task<Shared.Entities.Customer?> DisconnectCustomerChildJob(string customerId, string jobId)
-	{
-		int id = int.Parse(customerId);
-		using var context = MakeContext();
-		var cust = await context.Customers.Include(c => c.Jobs).FirstOrDefaultAsync(c => c.Id == id);
-		if (cust == null) return null;
-		var job = cust.Jobs.FirstOrDefault(j => j.Id.ToString() == jobId);
-		if (job != null)
-		{
-			job.CustomerId = null;
-			cust.Jobs.Remove(job);
-			await context.SaveChangesAsync();
-		}
-		await context.SaveChangesAsync().ConfigureAwait(false);
-		return await RereadCustomer(context, id).ConfigureAwait(false);
-	}
+	public Task<Shared.Entities.Customer?> DisconnectCustomerChildJob(string customerId, string jobId) => throw new Exception($"Changing customer and job relationships is not permitted after they have been created.");
 
 	public async Task<Shared.Entities.Customer?> ConnectCustomerChildUsers(string customerId, string[] userIds)
 	{
