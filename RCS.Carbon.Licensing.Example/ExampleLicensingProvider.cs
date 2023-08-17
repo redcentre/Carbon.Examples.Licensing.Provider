@@ -69,10 +69,12 @@ public class ExampleLicensingProvider : ILicensingProvider
 
 	#region Authentication
 
+	static long GetId(string userId) => long.TryParse(userId, out long id) ? id : throw new CarbonException(230, $"User Id '{userId}' is not in the correct format");
+
 	public async Task<LicenceFull> LoginId(string userId, string? password, bool skipCache = false)
 	{
 		using var context = MakeContext();
-		long id = long.Parse(userId);
+		long id = GetId(userId);
 		var user = await context.Users.AsNoTracking()
 			.Include(u => u.Customers).ThenInclude(c => c.Jobs)
 			.Include(u => u.Jobs).ThenInclude(j => j.Customer)
@@ -124,7 +126,7 @@ public class ExampleLicensingProvider : ILicensingProvider
 	public async Task<int> ChangePassword(string userId, string? oldPassword, string newPassword)
 	{
 		using var context = MakeContext();
-		long id = long.Parse(userId);
+		long id = GetId(userId);
 		var user = context.Users.FirstOrDefault(u => u.Id == id) ?? throw new CarbonException(400, $"User Id '{userId}' does not exist");
 		if (user.Psw != null && user.Psw != oldPassword)
 		{
@@ -137,7 +139,7 @@ public class ExampleLicensingProvider : ILicensingProvider
 	public async Task<int> UpdateAccount(string userId, string userName, string? comment, string? email)
 	{
 		using var context = MakeContext();
-		long id = long.Parse(userId);
+		long id = GetId(userId);
 		var user = context.Users.FirstOrDefault(u => u.Id == id) ?? throw new CarbonException(600, $"User Id '{userId}' does not exist");
 		user.Name = userName;
 		user.Comment = comment;

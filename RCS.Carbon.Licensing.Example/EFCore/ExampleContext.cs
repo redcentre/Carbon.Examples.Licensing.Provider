@@ -5,18 +5,12 @@ namespace RCS.Carbon.Licensing.Example.EFCore;
 
 public partial class ExampleContext : DbContext
 {
-	// Server=tcp:ortho-server-1.database.windows.net,1433;Initial Catalog=CarbonExample;Persist Security Info=False;User ID=greg;Password=M0ggies9;MultipleActiveResultSets=False;Encrypt=True;TrustServerCertificate=False;Connection Timeout=30;
 	readonly string _connect;
 
 	public ExampleContext(string adoConnect)
 	{
 		_connect = adoConnect;
 	}
-
-	//public CarbonExampleContext(DbContextOptions<CarbonExampleContext> options)
-	//    : base(options)
-	//{
-	//}
 
 	public virtual DbSet<Customer> Customers { get; set; }
 
