@@ -18,7 +18,6 @@ using Azure.Storage.Blobs.Models;
 using Microsoft.EntityFrameworkCore;
 using RCS.Carbon.Licensing.Example.EFCore;
 using RCS.Carbon.Licensing.Shared;
-using RCS.Carbon.Shared;
 
 #nullable enable
 
@@ -69,7 +68,7 @@ public class ExampleLicensingProvider : ILicensingProvider
 
 	#region Authentication
 
-	static long GetId(string userId) => long.TryParse(userId, out long id) ? id : throw new CarbonException(230, $"User Id '{userId}' is not in the correct format");
+	static long GetId(string userId) => long.TryParse(userId, out long id) ? id : throw new ApplicationException($"User Id '{userId}' is not in the correct format");
 
 	public async Task<LicenceFull> LoginId(string userId, string? password, bool skipCache = false)
 	{
@@ -78,10 +77,10 @@ public class ExampleLicensingProvider : ILicensingProvider
 		var user = await context.Users.AsNoTracking()
 			.Include(u => u.Customers).ThenInclude(c => c.Jobs)
 			.Include(u => u.Jobs).ThenInclude(j => j.Customer)
-			.FirstOrDefaultAsync(u => u.Id == id) ?? throw new CarbonException(200, $"User Id '{userId}' does not exist");
+			.FirstOrDefaultAsync(u => u.Id == id) ?? throw new ApplicationException($"User Id '{userId}' does not exist");
 		if (user.Psw != null & user.Psw != password)
 		{
-			throw new CarbonException(201, $"User Id '{userId}' incorrect password");
+			throw new ApplicationException($"User Id '{userId}' incorrect password");
 		}
 		return UserToFull(user);
 	}
@@ -93,10 +92,10 @@ public class ExampleLicensingProvider : ILicensingProvider
 		var user = await context.Users.AsNoTracking()
 			.Include(u => u.Customers).ThenInclude(c => c.Jobs)
 			.Include(u => u.Jobs).ThenInclude(j => j.Customer)
-			.FirstOrDefaultAsync(u => u.Name.ToUpper() == upname) ?? throw new CarbonException(100, $"User Name '{userName}' does not exist");
+			.FirstOrDefaultAsync(u => u.Name.ToUpper() == upname) ?? throw new ApplicationException($"User Name '{userName}' does not exist");
 		if (user.Psw != null & user.Psw != password)
 		{
-			throw new CarbonException(101, $"User Name '{userName}' incorrect password");
+			throw new ApplicationException($"User Name '{userName}' incorrect password");
 		}
 		return UserToFull(user);
 	}
@@ -109,7 +108,7 @@ public class ExampleLicensingProvider : ILicensingProvider
 			.Include(u => u.Jobs).ThenInclude(j => j.Customer)
 			.FirstOrDefaultAsync(u => u.Name == GuestAccountName);
 		return user == null
-			? throw new CarbonException(20, $"Free or guest account with Name {GuestAccountName} does not exist")
+			? throw new ApplicationException($"Free or guest account with Name {GuestAccountName} does not exist")
 			: UserToFull(user);
 	}
 
@@ -127,10 +126,10 @@ public class ExampleLicensingProvider : ILicensingProvider
 	{
 		using var context = MakeContext();
 		long id = GetId(userId);
-		var user = context.Users.FirstOrDefault(u => u.Id == id) ?? throw new CarbonException(400, $"User Id '{userId}' does not exist");
+		var user = context.Users.FirstOrDefault(u => u.Id == id) ?? throw new ApplicationException($"User Id '{userId}' does not exist");
 		if (user.Psw != null && user.Psw != oldPassword)
 		{
-			throw new CarbonException(500, $"User Id '{userId}' incorrect old password");
+			throw new ApplicationException($"User Id '{userId}' incorrect old password");
 		}
 		user.Psw = newPassword;
 		return await context.SaveChangesAsync().ConfigureAwait(false);
@@ -140,7 +139,7 @@ public class ExampleLicensingProvider : ILicensingProvider
 	{
 		using var context = MakeContext();
 		long id = GetId(userId);
-		var user = context.Users.FirstOrDefault(u => u.Id == id) ?? throw new CarbonException(600, $"User Id '{userId}' does not exist");
+		var user = context.Users.FirstOrDefault(u => u.Id == id) ?? throw new ApplicationException($"User Id '{userId}' does not exist");
 		user.Name = userName;
 		user.Comment = comment;
 		user.Email = email;
@@ -255,7 +254,7 @@ public class ExampleLicensingProvider : ILicensingProvider
 		else
 		{
 			// This is an update of an existing customer.
-			row = await context.Customers.FirstOrDefaultAsync(c => c.Id.ToString() == customer.Id).ConfigureAwait(false) ?? throw new CarbonException(700, $"Customer Id {customer.Id} not found for update");
+			row = await context.Customers.FirstOrDefaultAsync(c => c.Id.ToString() == customer.Id).ConfigureAwait(false) ?? throw new ApplicationException($"Customer Id {customer.Id} not found for update");
 		}
 		row.Name = customer.Name;
 		row.DisplayName = customer.DisplayName;
@@ -417,7 +416,7 @@ public class ExampleLicensingProvider : ILicensingProvider
 		}
 		else
 		{
-			row = await context.Jobs.FirstOrDefaultAsync(j => j.Id.ToString() == job.Id) ?? throw new CarbonException(701, $"Customer Id {job.Id} not found for update");
+			row = await context.Jobs.FirstOrDefaultAsync(j => j.Id.ToString() == job.Id) ?? throw new ApplicationException($"Customer Id {job.Id} not found for update");
 		}
 		row.Name = job.Name;
 		row.DataLocation = (int?)job.DataLocation;
@@ -563,7 +562,7 @@ public class ExampleLicensingProvider : ILicensingProvider
 		}
 		else
 		{
-			row = await context.Users.FirstAsync(u => u.Id.ToString() == user.Id) ?? throw new CarbonException(700, $"User Id {user.Id} not found for update");
+			row = await context.Users.FirstAsync(u => u.Id.ToString() == user.Id) ?? throw new ApplicationException($"User Id {user.Id} not found for update");
 			if (row.Uid == Guid.Empty)
 			{
 				row.Uid = Guid.NewGuid();
@@ -714,10 +713,10 @@ public class ExampleLicensingProvider : ILicensingProvider
 			mimedoc = XDocument.Parse(xml);
 		}
 		int jobid = int.Parse(parameters.JobId);
-		if (uploadList.Any(u => u.JobId == jobid && u.IsRunning)) throw new CarbonException(666, $"Job Id {parameters.JobId} already has an upload running");
+		if (uploadList.Any(u => u.JobId == jobid && u.IsRunning)) throw new ApplicationException($"Job Id {parameters.JobId} already has an upload running");
 		using var context = MakeContext();
-		var job = await context.Jobs.AsNoTracking().Include(j => j.Customer).FirstOrDefaultAsync(j => j.Id == jobid) ?? throw new CarbonException(666, $"Job Id {parameters.JobId} does not exist for upload");
-		if (job.CustomerId == null) throw new CarbonException(666, $"Job Id {parameters.JobId} does not have a parent customer");
+		var job = await context.Jobs.AsNoTracking().Include(j => j.Customer).FirstOrDefaultAsync(j => j.Id == jobid) ?? throw new ApplicationException($"Job Id {parameters.JobId} does not exist for upload");
+		if (job.CustomerId == null) throw new ApplicationException($"Job Id {parameters.JobId} does not have a parent customer");
 		var data = new UploadTData(job.Id, job.Name, job.Customer.StorageKey, parameters, progress);
 		uploadList.Add(data);
 		var thread = new Thread(new ParameterizedThreadStart(UploadProc!));
