@@ -393,26 +393,26 @@ public class ExampleLicensingProvider : ILicensingProvider
 				Created = DateTime.UtcNow
 			};
 			context.Jobs.Add(row);
-			// Ensure a container for the job in the parent customer storage account.
-			if (job.CustomerId != null)
-			{
-				int custid = int.Parse(job.CustomerId);
-				var cust = await context.Customers.AsNoTracking().FirstOrDefaultAsync(c => c.Id == custid).ConfigureAwait(false);
-				if (cust != null)
-				{
-					try
-					{
-						var client = new BlobServiceClient(cust.StorageKey);
-						var cc = client.GetBlobContainerClient(job.Name);
-						Azure.Response<BlobContainerInfo> resp = await cc.CreateIfNotExistsAsync().ConfigureAwait(false);
-						Trace.WriteLine($"Create container '{job.Name}' in customer '{cust.Name}' - {resp?.Value.ETag}");
-					}
-					catch (Exception ex)
-					{
-						Trace.WriteLine($"Failed to create container '{job.Name}' in customer '{cust.Name}' - {ex.Message}");
-					}
-				}
-			}
+			//// Ensure a container for the job in the parent customer storage account.
+			//if (job.CustomerId != null)
+			//{
+			//	int custid = int.Parse(job.CustomerId);
+			//	var cust = await context.Customers.AsNoTracking().FirstOrDefaultAsync(c => c.Id == custid).ConfigureAwait(false);
+			//	if (cust != null)
+			//	{
+			//		try
+			//		{
+			//			var client = new BlobServiceClient(cust.StorageKey);
+			//			var cc = client.GetBlobContainerClient(job.Name);
+			//			Azure.Response<BlobContainerInfo> resp = await cc.CreateIfNotExistsAsync().ConfigureAwait(false);
+			//			Trace.WriteLine($"Create container '{job.Name}' in customer '{cust.Name}' - {resp?.Value.ETag}");
+			//		}
+			//		catch (Exception ex)
+			//		{
+			//			Trace.WriteLine($"Failed to create container '{job.Name}' in customer '{cust.Name}' - {ex.Message}");
+			//		}
+			//	}
+			//}
 		}
 		else
 		{
