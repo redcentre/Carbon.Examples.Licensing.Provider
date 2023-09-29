@@ -178,7 +178,7 @@ public class ExampleLicensingProvider : ILicensingProvider
 				Inactive = j.Inactive,
 				CustomerId = j.CustomerId?.ToString(),
 				UserIds = j.Users.Select(u => u.Id.ToString()).ToArray(),
-				VartreeNames = j.VartreeNames?.Split(',') ?? Array.Empty<string>()
+				VartreeNames = j.VartreeNames?.Split(",; ".ToCharArray()) ?? Array.Empty<string>()
 			}
 			).ToArrayAsync().ConfigureAwait(false);
 		var users = await context.Users.AsNoTracking()
@@ -432,7 +432,7 @@ public class ExampleLicensingProvider : ILicensingProvider
 		row.IsMobile = job.IsMobile;
 		row.DashboardsFirst = job.DashboardsFirst;
 		row.Inactive = job.Inactive;
-		row.VartreeNames = job.VartreeNames?.Length > 0 ? string.Join(",", job.VartreeNames) : null;
+		row.VartreeNames = job.VartreeNames?.Length > 0 ? string.Join(" ", job.VartreeNames) : null;
 		row.LastUpdate = DateTime.UtcNow;
 		await context.SaveChangesAsync().ConfigureAwait(false);
 		Shared.Entities.Job job2 = await RereadJob(context, row.Id).ConfigureAwait(false);
@@ -626,6 +626,7 @@ public class ExampleLicensingProvider : ILicensingProvider
 		{
 			user.Customers.Add(addcust);
 		}
+		user.CloudCustomerNames = user.Customers.Count == 0 ? null : string.Join(" ", user.Customers.Select(c => c.Name));
 		await context.SaveChangesAsync().ConfigureAwait(false);
 		return await RereadUser(context, id);
 	}
@@ -640,8 +641,8 @@ public class ExampleLicensingProvider : ILicensingProvider
 		if (cust != null)
 		{
 			user.Customers.Remove(cust);
-			await context.SaveChangesAsync();
 		}
+		user.CloudCustomerNames = user.Customers.Count == 0 ? null : string.Join(" ", user.Customers.Select(c => c.Name));
 		await context.SaveChangesAsync().ConfigureAwait(false);
 		return await RereadUser(context, id);
 	}
@@ -977,10 +978,10 @@ public class ExampleLicensingProvider : ILicensingProvider
 		{
 			Id = user.Id.ToString(),
 			Name = user.Name,
-			CloudCustomerNames = user.CloudCustomerNames?.Split(','),
-			CloudJobNames = user.JobNames?.Split(","),
-			DashboardNames = user.DashboardNames?.Split(","),
-			VartreeNames = user.VartreeNames?.Split(','),
+			CloudCustomerNames = user.CloudCustomerNames?.Split(",; ".ToArray()),
+			CloudJobNames = user.JobNames?.Split(",; ".ToArray()),
+			DashboardNames = user.DashboardNames?.Split(",; ".ToArray()),
+			VartreeNames = user.VartreeNames?.Split(",; ".ToArray()),
 			Created = user.Created,
 			DataLocation = ((Shared.Entities.DataLocationType?)user.DataLocation)?.ToString(),
 			EntityId = user.EntityId,
@@ -1015,7 +1016,7 @@ public class ExampleLicensingProvider : ILicensingProvider
 					Name = j.Name,
 					DisplayName = j.DisplayName,
 					Description = j.Description,
-					VartreeNames = j.VartreeNames?.Split(',')
+					VartreeNames = j.VartreeNames?.Split(",; ".ToArray()),
 				}).ToArray()
 			}).ToArray()
 		};
