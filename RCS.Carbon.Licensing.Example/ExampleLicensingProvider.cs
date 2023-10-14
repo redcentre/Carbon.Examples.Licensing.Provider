@@ -974,6 +974,7 @@ public class ExampleLicensingProvider : ILicensingProvider
 	{
 		Customer[] custs = user.Customers.Concat(user.Jobs.Select(j => j.Customer)).Distinct(new CustomerComparer()).ToArray();
 		Job[] jobs = user.Jobs.Concat(user.Customers.SelectMany(c => c.Jobs)).Distinct(new JobComparer()).ToArray();
+		string s = $"{user.Id}+{user.Name}+{DateTime.UtcNow:s}";
 		return new LicenceFull()
 		{
 			Id = user.Id.ToString(),
@@ -1002,6 +1003,7 @@ public class ExampleLicensingProvider : ILicensingProvider
 			EntityType = null,
 			Recovered = null,
 			GuestJobs = null,
+			LicenceKey = null,		// This value can be set by the parent service, it's not part of the licensing database.
 			Roles = user.Roles?.Split(','),
 			Customers = custs.Select(c => new LicenceCustomer()
 			{
