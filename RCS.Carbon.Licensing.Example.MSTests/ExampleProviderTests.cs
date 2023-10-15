@@ -35,10 +35,12 @@ public class ExampleProviderTests : TestBase
 		// │ flow, as such in the json file, or in User Secrets.              │
 		// └──────────────────────────────────────────────────────────────────┘
 
+		string? lickey = config["CarbonApi:LicenceKey"];
 		string? connect = config["CarbonApi:AdoConnect"];
+		Assert.IsNotNull(lickey, "A licence key must be defined in configuration. Use the settings file, user secrets (in development) or another configuration source to provide the value.");
 		Assert.IsNotNull(connect, "An ADO connection string to the SQL Server database must be defined in configuration. Use the settings file, user secrets (in development) or another configuration source to provide the value.");
 		Info(connect);
-		var prov = new ExampleLicensingProvider(connect);
+		var prov = new ExampleLicensingProvider(lickey, connect);
 		Info(prov.Description);
 		var engine = new CrossTabEngine(prov);
 		Sep1("Login");

@@ -29,6 +29,7 @@ namespace RCS.Carbon.Licensing.Example;
 /// </summary>
 public class ExampleLicensingProvider : ILicensingProvider
 {
+	readonly string _lickey;
 	readonly string? _connect;
 	const string GuestAccountName = "guest";
 	const string MimeUrl = "https://systemrcs.blob.core.windows.net/reference/mime-types.xml";
@@ -45,10 +46,14 @@ public class ExampleLicensingProvider : ILicensingProvider
 	[Description("Example licensing provider using a SQL Server database")]
 	public ExampleLicensingProvider(
 		[Required]
+		[Description("Licence key")]
+		string licenceKey,
+		[Required]
 		[Description("ADO database connection string")]
 		string adoConnectionString
 	)
 	{
+		_lickey = licenceKey ?? throw new ArgumentNullException(nameof(licenceKey));
 		_connect = adoConnectionString ?? throw new ArgumentNullException(nameof(adoConnectionString));
 	}
 
@@ -970,7 +975,7 @@ public class ExampleLicensingProvider : ILicensingProvider
 	/// A deep loaded User from the example database is converted into a Carbon full licence.
 	/// The example rows only contain mimimal data, so a lot of the return properties are null and unused.
 	/// </summary>
-	static LicenceFull UserToFull(User user)
+	LicenceFull UserToFull(User user)
 	{
 		Customer[] custs = user.Customers.Concat(user.Jobs.Select(j => j.Customer)).Distinct(new CustomerComparer()).ToArray();
 		Job[] jobs = user.Jobs.Concat(user.Customers.SelectMany(c => c.Jobs)).Distinct(new JobComparer()).ToArray();
@@ -1003,7 +1008,7 @@ public class ExampleLicensingProvider : ILicensingProvider
 			EntityType = null,
 			Recovered = null,
 			GuestJobs = null,
-			LicenceKey = null,		// This value can be set by the parent service, it's not part of the licensing database.
+			LicenceKey = _lickey,		// This value can be set by the parent service, it's not part of the licensing database.
 			Roles = user.Roles?.Split(','),
 			Customers = custs.Select(c => new LicenceCustomer()
 			{
