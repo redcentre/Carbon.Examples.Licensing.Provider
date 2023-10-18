@@ -16,6 +16,7 @@ using Azure;
 using Azure.Storage.Blobs;
 using Azure.Storage.Blobs.Models;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Azure;
 using RCS.Carbon.Licensing.Example.EFCore;
 using RCS.Carbon.Licensing.Shared;
 
@@ -545,7 +546,9 @@ public class ExampleLicensingProvider : ILicensingProvider
 	public async Task<Shared.Entities.User[]> ListUsers()
 	{
 		using var context = MakeContext();
-		return await context.Users.AsNoTracking().AsAsyncEnumerable().Select(u => ToUser(u, false)!).ToArrayAsync().ConfigureAwait(false);
+		var users = await context.Users.AsNoTracking().ToArrayAsync().ConfigureAwait(false);
+		return users.Select(u => ToUser(u, false)!).ToArray();
+		//return await context.Users.AsNoTracking().AsAsyncEnumerable().Select(u => ToUser(u, false)!).ToArrayAsync().ConfigureAwait(false);
 	}
 
 	public async Task<Shared.Entities.User> UpdateUser(Shared.Entities.User user)
@@ -554,10 +557,19 @@ public class ExampleLicensingProvider : ILicensingProvider
 		User row;
 		if (user.Id == null)
 		{
+			// A null Id on the incoming User has special meaning and indicates
+			// we are creating a new User. The Id cannot be manually specified.
 			Guid uid = Guid.NewGuid();
+			int[] oldids = await context.Users.Select(u => u.Id).ToArrayAsync().ConfigureAwait(false);
+			int randid;
+			do
+			{
+				randid = Random.Shared.Next(10_000_000, 20_000_000);
+			}
+			while (oldids.Any(x => x == randid));
 			row = new User
 			{
-				Id = Random.Shared.Next(10_000_000, 20_000_000),
+				Id = randid,
 				Uid = uid,
 				Psw = null,     // The plaintext password might be needed for legacy usage, but avoid like the plague.
 				PassHash = user.PassHash ?? HP(user.Psw, uid),
