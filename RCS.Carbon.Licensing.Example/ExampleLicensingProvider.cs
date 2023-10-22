@@ -30,7 +30,7 @@ namespace RCS.Carbon.Licensing.Example;
 /// </summary>
 public class ExampleLicensingProvider : ILicensingProvider
 {
-	readonly string _lickey;
+	readonly string _prodkey;
 	readonly string? _connect;
 	const string GuestAccountName = "guest";
 	const string MimeUrl = "https://systemrcs.blob.core.windows.net/reference/mime-types.xml";
@@ -47,14 +47,14 @@ public class ExampleLicensingProvider : ILicensingProvider
 	[Description("Example licensing provider using a SQL Server database")]
 	public ExampleLicensingProvider(
 		[Required]
-		[Description("Licence key")]
-		string licenceKey,
+		[Description("Product key")]
+		string productKey,
 		[Required]
 		[Description("ADO database connection string")]
 		string adoConnectionString
 	)
 	{
-		_lickey = licenceKey ?? throw new ArgumentNullException(nameof(licenceKey));
+		_prodkey = productKey ?? throw new ArgumentNullException(nameof(productKey));
 		_connect = adoConnectionString ?? throw new ArgumentNullException(nameof(adoConnectionString));
 	}
 
@@ -1020,7 +1020,7 @@ public class ExampleLicensingProvider : ILicensingProvider
 			EntityType = null,
 			Recovered = null,
 			GuestJobs = null,
-			LicenceKey = _lickey,		// This value can be set by the parent service, it's not part of the licensing database.
+			ProductKey= _prodkey,		// This value can be set by the parent service, it's not part of the licensing database.
 			Roles = user.Roles?.Split(','),
 			Customers = custs.Select(c => new LicenceCustomer()
 			{
