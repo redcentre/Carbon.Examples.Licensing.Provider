@@ -1143,6 +1143,4 @@ public class ExampleLicensingProvider : ILicensingProvider
 	}
 
 	ExampleContext MakeContext() => new(_connect);
-
-	static string Redact(string value) => new string('*', value.Length - 1) + value.Last();
 }
