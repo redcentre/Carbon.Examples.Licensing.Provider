@@ -17,7 +17,7 @@
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
-    <PackageReference Include="RCS.Carbon.Tables" Version="8.6.18" />
+    <PackageReference Include="RCS.Carbon.Tables" Version="8.6.20" />
   </ItemGroup>
 
   <ItemGroup>
