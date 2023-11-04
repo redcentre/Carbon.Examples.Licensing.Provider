@@ -88,7 +88,7 @@ public partial class ExampleLicensingProvider : ILicensingProvider
 			Recovered = null,
 			GuestJobs = null,
 			ProductKey = _prodkey,      // This value can be set by the parent service, it's not part of the licensing database.
-			Roles = user.Roles?.Split(','),
+			Roles = user.Roles?.Split(",; ".ToArray()),
 			Customers = custs.Select(c => new LicenceCustomer()
 			{
 				Id = c.Id.ToString(),
