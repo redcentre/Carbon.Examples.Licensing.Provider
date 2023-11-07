@@ -16,7 +16,7 @@ partial class ExampleLicensingProvider
 		int id = int.Parse(userId);
 		using var context = MakeContext();
 		var user = await context.Users.AsNoTracking().Include(u => u.Customers).Include(u => u.Jobs).FirstOrDefaultAsync(u => u.Id == id).ConfigureAwait(false);
-		return user == null ? null : ToUser(user, true);
+		return ToUser(user, true);
 	}
 
 	public async Task<Shared.Entities.User[]> ListUsers()
@@ -24,7 +24,6 @@ partial class ExampleLicensingProvider
 		using var context = MakeContext();
 		var users = await context.Users.AsNoTracking().ToArrayAsync().ConfigureAwait(false);
 		return users.Select(u => ToUser(u, false)!).ToArray();
-		//return await context.Users.AsNoTracking().AsAsyncEnumerable().Select(u => ToUser(u, false)!).ToArrayAsync().ConfigureAwait(false);
 	}
 
 	public async Task<Shared.Entities.User> UpdateUser(Shared.Entities.User user)
@@ -112,9 +111,10 @@ partial class ExampleLicensingProvider
 	{
 		int id = int.Parse(userId);
 		using var context = MakeContext();
-		var user = await context.Users.Include(u => u.Customers).FirstOrDefaultAsync(u => u.Id.ToString() == userId).ConfigureAwait(false);
+		var user = await context.Users.Include(u => u.Customers).FirstOrDefaultAsync(u => u.Id == id).ConfigureAwait(false);
 		if (user == null) return null;
-		var addcusts = context.Customers.Where(c => customerIds.Contains(c.Id.ToString())).ToArray();
+		int[] cids = customerIds.Select(c => int.Parse(c)).ToArray();
+		var addcusts = context.Customers.Where(c => cids.Contains(c.Id)).ToArray();
 		foreach (var addcust in addcusts)
 		{
 			user.Customers.Add(addcust);
@@ -128,9 +128,10 @@ partial class ExampleLicensingProvider
 	{
 		int id = int.Parse(userId);
 		using var context = MakeContext();
-		var user = await context.Users.Include(c => c.Customers).FirstOrDefaultAsync(u => u.Id.ToString() == userId).ConfigureAwait(false);
+		var user = await context.Users.Include(u => u.Customers).FirstOrDefaultAsync(u => u.Id.ToString() == userId).ConfigureAwait(false);
 		if (user == null) return null;
-		var cust = user.Customers.FirstOrDefault(c => c.Id.ToString() == customerId);
+		int cid = int.Parse(customerId);
+		var cust = user.Customers.FirstOrDefault(c => c.Id == cid);
 		if (cust != null)
 		{
 			user.Customers.Remove(cust);
@@ -146,7 +147,8 @@ partial class ExampleLicensingProvider
 		using var context = MakeContext();
 		var user = await context.Users.Include(u => u.Jobs).FirstOrDefaultAsync(u => u.Id.ToString() == userId).ConfigureAwait(false);
 		if (user == null) return null;
-		var addjobs = context.Jobs.Where(j => jobIds.Contains(j.Id.ToString())).ToArray();
+		int[] jids = jobIds.Select(j => int.Parse(j)).ToArray();
+		var addjobs = context.Jobs.Where(j => jids.Contains(j.Id)).ToArray();
 		foreach (var addjob in addjobs)
 		{
 			user.Jobs.Add(addjob);
@@ -161,10 +163,11 @@ partial class ExampleLicensingProvider
 		using var context = MakeContext();
 		var user = await context.Users.Include(c => c.Jobs).FirstOrDefaultAsync(u => u.Id.ToString() == userId);
 		if (user == null) return null;
-		var cust = user.Jobs.FirstOrDefault(j => j.Id.ToString() == jobId);
-		if (cust != null)
+		int jid = int.Parse(jobId);
+		var job = user.Jobs.FirstOrDefault(j => j.Id == jid);
+		if (job != null)
 		{
-			user.Jobs.Remove(cust);
+			user.Jobs.Remove(job);
 			await context.SaveChangesAsync();
 		}
 		await context.SaveChangesAsync().ConfigureAwait(false);
@@ -173,7 +176,7 @@ partial class ExampleLicensingProvider
 
 	static async Task<Shared.Entities.User?> RereadUser(ExampleContext context, int userId)
 	{
-		var cust = await context.Users.AsNoTracking().Include(c => c.Customers).Include(c => c.Jobs).FirstOrDefaultAsync(c => c.Id == userId).ConfigureAwait(false);
+		var cust = await context.Users.AsNoTracking().Include(c => c.Customers).Include(c => c.Jobs).FirstOrDefaultAsync(u => u.Id == userId).ConfigureAwait(false);
 		return ToUser(cust, true);
 	}
 

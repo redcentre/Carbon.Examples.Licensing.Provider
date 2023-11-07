@@ -118,6 +118,39 @@ CREATE TABLE [dbo].[UserJob]
 )
 GO
 ------------------------------------------------------------------------------------------------
+CREATE TABLE [dbo].[Realm]
+(
+	[Id] INT NOT NULL,
+	[Name] NVARCHAR(16) NOT NULL,
+	[Inactive] BIT NOT NULL CONSTRAINT DF_Realm_Inactive DEFAULT 0,
+	[Created] DATETIME NOT NULL CONSTRAINT DF_Realm_Created DEFAULT (GETUTCDATE()),
+	[Policy] XML NULL,
+	CONSTRAINT [PK_Realm_Id] PRIMARY KEY CLUSTERED ([Id] ASC)
+)
+GO
+CREATE UNIQUE INDEX [IX_Realm_Name] ON [Realm] ([Name]);
+GO
+------------------------------------------------------------------------------------------------
+CREATE TABLE [dbo].[RealmUser]
+(
+	[RealmId] INT NOT NULL,
+	[UserId] INT NOT NULL,
+	CONSTRAINT [PK_RealmUser] PRIMARY KEY CLUSTERED ([RealmId] ASC, [UserId] ASC),
+	CONSTRAINT [FK_RealmUser_RealmId] FOREIGN KEY ([RealmId]) REFERENCES [Realm] ([Id]),
+	CONSTRAINT [FK_RealmUser_UserId] FOREIGN KEY ([UserId]) REFERENCES [User] ([Id])
+)
+GO
+------------------------------------------------------------------------------------------------
+CREATE TABLE [dbo].[RealmCustomer]
+(
+	[RealmId] INT NOT NULL,
+	[CustomerId] INT NOT NULL,
+	CONSTRAINT [PK_RealmCustomer] PRIMARY KEY CLUSTERED ([RealmId] ASC, [CustomerId] ASC),
+	CONSTRAINT [FK_RealmCustomer_RealmId] FOREIGN KEY ([RealmId]) REFERENCES [Realm] ([Id]),
+	CONSTRAINT [FK_RealmCustomer_CustomerId] FOREIGN KEY ([CustomerId]) REFERENCES [Customer] ([Id])
+)
+GO
+------------------------------------------------------------------------------------------------
 INSERT INTO [Customer] (Id,[Name],DisplayName,StorageKey) VALUES(30000008,'client1rcs','Client-1 RCS', 'DefaultEndpointsProtocol=https;AccountName=zclient1rcs;AccountKey=SVWdI634A0GSqXoJt3mHjA3jMkKhI9FKRUVoVgcaPR1isxgAqfJk2aFemc7wZ60dcaoq/K9m1QMj+AStM3bk2A==;BlobEndpoint=https://zclient1rcs.blob.core.windows.net/;');
 INSERT INTO [Customer] (Id,[Name],DisplayName,StorageKey) VALUES(30000011,'rcspublic','RCS Public', 'DefaultEndpointsProtocol=https;AccountName=zrcspublic;AccountKey=r2RIAuWzCnHXO+h8B3bZFGpsrUizaUZ+qYhviUsbXK0NH1sj0xXAu6CPnQ7mmlKLtgrx6abZFe16+AStrDyeZw==;BlobEndpoint=https://zrcspublic.blob.core.windows.net/;');
 INSERT INTO [Customer] (Id,[Name],DisplayName,StorageKey) VALUES(30000022,'rcsruby','Ruby Samples', 'DefaultEndpointsProtocol=https;AccountName=zrcsruby;AccountKey=LKcyYfVJPTrnqWPjIH6km5W4/Nuv3AMxltgzJEnnfxD6Uo/jl+/AjW0EV7wPY4G52S8TiSh92zBb+AStnL5yaA==;BlobEndpoint=https://zrcsruby.blob.core.windows.net/;');

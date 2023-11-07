@@ -4,6 +4,7 @@ using System.ComponentModel;
 using System.ComponentModel.DataAnnotations;
 using System.Linq;
 using System.Reflection;
+using System.Threading.Tasks;
 using RCS.Carbon.Licensing.Example.EFCore;
 using RCS.Carbon.Licensing.Shared;
 
@@ -160,7 +161,7 @@ public partial class ExampleLicensingProvider : ILicensingProvider
 			CustomerId = job.CustomerId?.ToString(),
 			VartreeNames = job.VartreeNames?.Split(',') ?? Array.Empty<string>(),
 			Users = includeChildren ? job.Users?.Select(u => ToUser(u, false)).ToArray() : null,
-			Customer = includeChildren ? job.Customer == null ? null : ToCustomer(job.Customer, false) : null
+			Customer = includeChildren ? ToCustomer(job.Customer, false) : null
 		};
 	}
 
@@ -195,8 +196,24 @@ public partial class ExampleLicensingProvider : ILicensingProvider
 			Version = user.Version,
 			MinVersion = user.MinVersion,
 			IsDisabled = user.IsDisabled,
+			Created = user.Created,
 			Customers = includeChildren ? user.Customers?.Select(c => ToCustomer(c, false)).ToArray() : null,
 			Jobs = includeChildren ? user.Jobs?.Select(j => ToJob(j, false)).ToArray() : null
+		};
+	}
+
+	static Shared.Entities.Realm? ToRealm(Realm? realm, bool includeChildren)
+	{
+		if (realm == null) return null;
+		return new Shared.Entities.Realm()
+		{
+			Id = realm.Id.ToString(),
+			Name = realm.Name,
+			Inactive = realm.Inactive,
+			Policy = realm.Policy,
+			Created = realm.Created,
+			Users = includeChildren ? realm.Users?.Select(u => ToUser(u, false)).ToArray() : null,
+			Customers = includeChildren ? realm.Customers?.Select(c => ToCustomer(c, false)).ToArray() : null
 		};
 	}
 }

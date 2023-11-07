@@ -56,11 +56,24 @@ partial class ExampleLicensingProvider
 				JobIds = u.Jobs.Select(j => j.Id.ToString()).ToArray()
 			}
 			).ToArrayAsync().ConfigureAwait(false);
+		var realms = await context.Realms.AsNoTracking()
+			.Include(r => r.Users)
+			.Include(r => r.Customers)
+			.AsAsyncEnumerable()
+			.Select(r => new Shared.Entities.NavRealm()
+			{
+				Id = r.Id.ToString(),
+				Name = r.Name,
+				IsInactive = r.Inactive,
+				UserIds = r.Users.Select(u => u.Id.ToString()).ToArray(),
+				CustomerIds = r.Customers.Select(c => c.Id.ToString()).ToArray()
+			}).ToArrayAsync().ConfigureAwait(false);
 		return new Shared.Entities.NavData()
 		{
 			Customers = custs,
 			Jobs = jobs,
-			Users = users
+			Users = users,
+			Realms = realms
 		};
 	}
 

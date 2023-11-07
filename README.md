@@ -110,7 +110,7 @@ The installed Tools might not be the latest. Use the following command to ensure
 Scaffold the classes from the database:
 
 ```
-▶ cmd /c 'dotnet ef DbContext Scaffold "Server=tcp:{SERVERNAME}.database.windows.net,1433;Initial Catalog=CarbonLicensingExample;Persist Security Info=False;User ID=greg;Password={your_password};MultipleActiveResultSets=False;Encrypt=True;TrustServerCertificate=False;Connection Timeout=30;" Microsoft.EntityFrameworkCore.SqlServer --output-dir EFCore --data-annotations --context ExampleContext'
+▶ dotnet ef DbContext Scaffold "Server=tcp:{SERVERNAME}.database.windows.net,1433;Database={DATABASE};Persist Security Info=False;User ID={USER};Password={PASSWORD};MultipleActiveResultSets=False;Encrypt=True;TrustServerCertificate=True;Connection Timeout=30;" Microsoft.EntityFrameworkCore.SqlServer --output-dir EFCore --data-annotations --context ExampleContext --no-onconfiguring --force
 ```
 
 The generated classes will need adjusting to have all of the recommended [Data Annotation][annot] attributes. This has been done in the example project and the completed classes are in the EFCore folder of the example project.
