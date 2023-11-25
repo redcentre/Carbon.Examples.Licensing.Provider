@@ -97,12 +97,24 @@ public partial class ExampleLicensingProvider : ILicensingProvider
 				DisplayName = c.DisplayName,
 				Comment = c.Comment,
 				StorageKey = c.StorageKey,
+				Info = c.Info,
+				Logo = c.Logo,
+				SignInLogo = c.SignInLogo,
+				SignInNote = c.SignInNote,
+				Sequence = c.Sequence,
+				Url = null,
+				AgencyId = null,
+				ParentAgency = null,
 				Jobs = jobs.Where(j => j.CustomerId == c.Id).Select(j => new LicenceJob()
 				{
 					Id = j.Id.ToString(),
 					Name = j.Name,
 					DisplayName = j.DisplayName,
 					Description = j.Description,
+					Info = j.Info,
+					Logo = j.Logo,
+					Sequence = j.Sequence,
+					Url = j.Url,
 					VartreeNames = j.VartreeNames?.Split(",; ".ToArray()),
 				}).ToArray()
 			}).ToArray()
