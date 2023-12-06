@@ -79,6 +79,11 @@ partial class ExampleLicensingProvider
 		return await context.SaveChangesAsync().ConfigureAwait(false);
 	}
 
+	public async Task<bool> ResetPassword(string email, DateTime utcTime, int signature)
+	{
+		return true;
+	}
+
 	public async Task<int> UpdateAccount(string userId, string userName, string? comment, string? email)
 	{
 		using var context = MakeContext();
