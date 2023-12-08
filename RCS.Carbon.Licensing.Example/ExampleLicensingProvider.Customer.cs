@@ -26,6 +26,19 @@ partial class ExampleLicensingProvider
 		return await context.Customers.AsNoTracking().AsAsyncEnumerable().Select(c => ToCustomer(c, false)!).ToArrayAsync().ConfigureAwait(false);
 	}
 
+	public async Task<Shared.Entities.Customer[]> ListCustomers(params string[] realmIds)
+	{
+		var rids = realmIds.Select(x => int.Parse(x)).ToArray();
+		using var context = MakeContext();
+		return await context.Customers
+			.AsNoTracking()
+			.Where(c => c.Realms.Any(r => rids.Contains(r.Id)))
+			.AsAsyncEnumerable()
+			.Select(c => ToCustomer(c, false)!)
+			.ToArrayAsync()
+			.ConfigureAwait(false);
+	}
+
 	public async Task<Shared.Entities.Customer> UpdateCustomer(Shared.Entities.Customer customer)
 	{
 		using var context = MakeContext();

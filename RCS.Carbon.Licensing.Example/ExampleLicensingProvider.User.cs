@@ -26,6 +26,19 @@ partial class ExampleLicensingProvider
 		return users.Select(u => ToUser(u, false)!).ToArray();
 	}
 
+	public async Task<Shared.Entities.User[]> ListUsers(params string[] realmIds)
+	{
+		var rids = realmIds.Select(x => int.Parse(x)).ToArray();
+		using var context = MakeContext();
+		return await context.Users
+			.AsNoTracking()
+			.Where(u => u.Realms.Any(r => rids.Contains(r.Id)))
+			.AsAsyncEnumerable()
+			.Select(u => ToUser(u, false)!)
+			.ToArrayAsync()
+			.ConfigureAwait(false);
+	}
+
 	public async Task<Shared.Entities.User> UpdateUser(Shared.Entities.User user)
 	{
 		using var context = MakeContext();
