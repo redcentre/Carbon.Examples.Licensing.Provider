@@ -198,7 +198,6 @@ public partial class ExampleLicensingProvider : ILicensingProvider
 			Uid = user.Uid,
 			Comment = user.Comment,
 			Roles = user.Roles?.Split(",; ".ToCharArray(), StringSplitOptions.RemoveEmptyEntries) ?? Array.Empty<string>(),
-			Realms = user.Realms?.Select(r => ToRealm(r, false)).ToArray(),
 			Filter = user.Filter,
 			LoginMacs = user.LoginMacs,
 			LoginCount = user.LoginCount,
@@ -210,6 +209,7 @@ public partial class ExampleLicensingProvider : ILicensingProvider
 			MinVersion = user.MinVersion,
 			IsDisabled = user.IsDisabled,
 			Created = user.Created,
+			Realms = includeChildren ? user.Realms?.Select(r => ToRealm(r, false)).ToArray() : null,
 			Customers = includeChildren ? user.Customers?.Select(c => ToCustomer(c, false)).ToArray() : null,
 			Jobs = includeChildren ? user.Jobs?.Select(j => ToJob(j, false)).ToArray() : null
 		};

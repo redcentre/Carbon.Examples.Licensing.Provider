@@ -15,14 +15,23 @@ partial class ExampleLicensingProvider
 	{
 		int id = int.Parse(userId);
 		using var context = MakeContext();
-		var user = await context.Users.AsNoTracking().Include(u => u.Customers).Include(u => u.Jobs).FirstOrDefaultAsync(u => u.Id == id).ConfigureAwait(false);
+		var user = await context.Users
+			.AsNoTracking()
+			.Include(u => u.Customers)
+			.Include(u => u.Jobs)
+			.Include(u => u.Realms)
+			.FirstOrDefaultAsync(u => u.Id == id)
+			.ConfigureAwait(false);
 		return ToUser(user, true);
 	}
 
 	public async Task<Shared.Entities.User[]> ListUsers()
 	{
 		using var context = MakeContext();
-		var users = await context.Users.AsNoTracking().ToArrayAsync().ConfigureAwait(false);
+		var users = await context.Users
+			.AsNoTracking()
+			.ToArrayAsync()
+			.ConfigureAwait(false);
 		return users.Select(u => ToUser(u, false)!).ToArray();
 	}
 
@@ -32,6 +41,7 @@ partial class ExampleLicensingProvider
 		using var context = MakeContext();
 		return await context.Users
 			.AsNoTracking()
+			.Include(u => u.Realms)
 			.Where(u => u.Realms.Any(r => rids.Contains(r.Id)))
 			.AsAsyncEnumerable()
 			.Select(u => ToUser(u, false)!)
