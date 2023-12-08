@@ -21,12 +21,6 @@ public class ExampleProviderTests : TestBase
 	[TestMethod]
 	public async Task T020_Gentab()
 	{
-		IConfiguration config = new ConfigurationBuilder()
-			.AddJsonFile("appsettings.json")
-			.AddUserSecrets("9c9dd5cd-7323-46c4-aca6-b9289c171e54")
-			.Build();
-		Sep1("Create engine");
-
 		// ┌──────────────────────────────────────────────────────────────────┐
 		// │ The example licensing provider needs to connect to a SQL Server  │
 		// │ database which has been filled with a schema and sample rows     │
@@ -34,14 +28,7 @@ public class ExampleProviderTests : TestBase
 		// │ should be placed where it can be retrieved by normal config      │
 		// │ flow, as such in the json file, or in User Secrets.              │
 		// └──────────────────────────────────────────────────────────────────┘
-
-		string? lickey = config["CarbonApi:LicenceKey"];
-		string? connect = config["CarbonApi:AdoConnect"];
-		Assert.IsNotNull(lickey, "A licence key must be defined in configuration. Use the settings file, user secrets (in development) or another configuration source to provide the value.");
-		Assert.IsNotNull(connect, "An ADO connection string to the SQL Server database must be defined in configuration. Use the settings file, user secrets (in development) or another configuration source to provide the value.");
-		Info(connect);
-		var prov = new ExampleLicensingProvider(lickey, connect);
-		Info(prov.Description);
+		var prov = MakeProvider();
 		var engine = new CrossTabEngine(prov);
 		Sep1("Login");
 		LicenceInfo li = await engine.LoginId(GuestId, GuestPass);
@@ -73,5 +60,39 @@ public class ExampleProviderTests : TestBase
 		Sep1("Logout");
 		int count = await engine.LogoutId(GuestId);
 		Info($"Logout count -> {count}");
+	}
+
+	[TestMethod]
+	public async Task T040_Realms()
+	{
+		var prov = MakeProvider();
+		LicenceFull? licfull = await prov.LoginName("gfkeogh@gmail.com", "qwe123");
+		Assert.IsTrue(licfull.Realms.Length == 0);
+
+		licfull = await prov.LoginName("demo1@testusers.com", "demo123");
+		//PrintJson(licfull);
+		Assert.IsTrue(licfull.Realms.Length == 1);
+
+		var users = await prov.ListUsers(licfull.Realms[0].Id);
+		Info($"Realm {licfull.Realms[0].Name} users count -> {users.Length}");
+
+		users = await prov.ListUsers();
+		Info($"All users count -> {users.Length}");
+	}
+
+	ILicensingProvider MakeProvider()
+	{
+		IConfiguration config = new ConfigurationBuilder()
+			.AddJsonFile("appsettings.json")
+			.AddUserSecrets("9c9dd5cd-7323-46c4-aca6-b9289c171e54")
+			.Build();
+		string? lickey = config["CarbonApi:LicenceKey"];
+		string? connect = config["CarbonApi:AdoConnect"];
+		Assert.IsNotNull(lickey, "A licence key must be defined in configuration. Use the settings file, user secrets (in development) or another configuration source to provide the value.");
+		Assert.IsNotNull(connect, "An ADO connection string to the SQL Server database must be defined in configuration. Use the settings file, user secrets (in development) or another configuration source to provide the value.");
+		Info(connect);
+		var prov = new ExampleLicensingProvider(lickey, connect);
+		Info(prov.Description);
+		return prov;
 	}
 }

@@ -21,6 +21,7 @@ partial class ExampleLicensingProvider
 		var user = await context.Users.AsNoTracking()
 			.Include(u => u.Customers).ThenInclude(c => c.Jobs)
 			.Include(u => u.Jobs).ThenInclude(j => j.Customer)
+			.Include(u => u.Realms)
 			.FirstOrDefaultAsync(u => u.Id == id) ?? throw new ExampleLicensingException(LicensingErrorType.IdentityNotFound, $"User Id '{userId}' does not exist");
 		if (user.Psw != null & user.Psw != password)
 		{
@@ -36,6 +37,7 @@ partial class ExampleLicensingProvider
 		var user = await context.Users.AsNoTracking()
 			.Include(u => u.Customers).ThenInclude(c => c.Jobs)
 			.Include(u => u.Jobs).ThenInclude(j => j.Customer)
+			.Include(u => u.Realms)
 			.FirstOrDefaultAsync(u => u.Name.ToUpper() == upname) ?? throw new ExampleLicensingException(LicensingErrorType.IdentityNotFound, $"User Name '{userName}' does not exist");
 		if (user.Psw != null & user.Psw != password)
 		{

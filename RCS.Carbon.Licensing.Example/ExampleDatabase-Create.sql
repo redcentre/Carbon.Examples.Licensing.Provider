@@ -1,8 +1,11 @@
+--DROP TABLE [RealmCustomer];
+--DROP TABLE [RealmUser];
+--DROP TABLE [Realm];
 --DROP TABLE [UserJob];
 --DROP TABLE [UserCustomer];
---DROP TABLE [User];
 --DROP TABLE [Job];
 --DROP TABLE [Customer];
+--DROP TABLE [User];
 ------------------------------------------------------------------------------------------------
 CREATE TABLE [Customer]
 (
@@ -180,6 +183,9 @@ INSERT INTO [UserJob] VALUES(10000335,20000002);
 INSERT INTO [UserJob] VALUES(10000335,20000005);	-- This is a duplicate
 GO
 ------------------------------------------------------------------------------------------------
+--SELECT * FROM [Realm];
+--SELECT * FROM [RealmUser];
+--SELECT * FROM [RealmCustomer];
 --SELECT * FROM [Customer];
 --SELECT * FROM [Job];
 --SELECT * FROM [User];

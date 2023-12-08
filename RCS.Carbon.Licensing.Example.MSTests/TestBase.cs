@@ -1,5 +1,6 @@
 ﻿using System.Collections.Generic;
 using System.Linq;
+using System.Text.Json;
 using RCS.Carbon.Shared;
 
 namespace RCS.Carbon.Licensing.Example.MSTests;
@@ -24,4 +25,10 @@ public class TestBase
 	}
 
 	protected void Info(string message) => System.Diagnostics.Trace.WriteLine(message);
+
+	protected void PrintJson(object value)
+	{
+		string json = JsonSerializer.Serialize(value, new JsonSerializerOptions() { WriteIndented = true });
+		Info(json);
+	}
 }
