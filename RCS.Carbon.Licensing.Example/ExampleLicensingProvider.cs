@@ -198,6 +198,7 @@ public partial class ExampleLicensingProvider : ILicensingProvider
 			Uid = user.Uid,
 			Comment = user.Comment,
 			Roles = user.Roles?.Split(",; ".ToCharArray(), StringSplitOptions.RemoveEmptyEntries) ?? Array.Empty<string>(),
+			Realms = user.Realms?.Select(r => ToRealm(r, false)).ToArray(),
 			Filter = user.Filter,
 			LoginMacs = user.LoginMacs,
 			LoginCount = user.LoginCount,
