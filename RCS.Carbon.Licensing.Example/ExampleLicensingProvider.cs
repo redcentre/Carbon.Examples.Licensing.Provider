@@ -147,7 +147,8 @@ public partial class ExampleLicensingProvider : ILicensingProvider
 			SignInNote = cust.SignInNote,
 			Spent = cust.Spent,
 			Jobs = includeChildren ? cust.Jobs?.Select(j => ToJob(j, false)).ToArray() : null,
-			Users = includeChildren ? cust.Users?.Select(u => ToUser(u, false)).ToArray() : null
+			Users = includeChildren ? cust.Users?.Select(u => ToUser(u, false)).ToArray() : null,
+			Realms = includeChildren ? cust.Realms?.Select(r => ToRealm(r, false)).ToArray() : null
 		};
 	}
 

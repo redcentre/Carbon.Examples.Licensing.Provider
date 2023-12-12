@@ -17,6 +17,7 @@ partial class ExampleLicensingProvider
 		var custs = await context.Customers.AsNoTracking()
 			.Include(c => c.Users)
 			.Include(c => c.Jobs)
+			.Include(c => c.Realms)
 			.AsAsyncEnumerable()
 			.Select(c => new Shared.Entities.NavCustomer()
 			{
@@ -25,7 +26,8 @@ partial class ExampleLicensingProvider
 				DisplayName = c.DisplayName,
 				Inactive = c.Inactive,
 				JobIds = c.Jobs.Select(j => j.Id.ToString()).ToArray(),
-				UserIds = c.Users.Select(u => u.Id.ToString()).ToArray()
+				UserIds = c.Users.Select(u => u.Id.ToString()).ToArray(),
+				RealmIds = c.Realms.Select(r => r.Id.ToString()).ToArray()
 			}
 			).ToArrayAsync().ConfigureAwait(false);
 		var jobs = await context.Jobs.AsNoTracking()
@@ -45,6 +47,7 @@ partial class ExampleLicensingProvider
 		var users = await context.Users.AsNoTracking()
 			.Include(u => u.Customers)
 			.Include(u => u.Jobs)
+			.Include(u => u.Realms)
 			.AsAsyncEnumerable()
 			.Select(u => new Shared.Entities.NavUser()
 			{
@@ -53,7 +56,8 @@ partial class ExampleLicensingProvider
 				Email = u.Email,
 				IsDisabled = u.IsDisabled,
 				CustomerIds = u.Customers.Select(c => c.Id.ToString()).ToArray(),
-				JobIds = u.Jobs.Select(j => j.Id.ToString()).ToArray()
+				JobIds = u.Jobs.Select(j => j.Id.ToString()).ToArray(),
+				RealmIds = u.Realms.Select(r => r.Id.ToString()).ToArray()
 			}
 			).ToArrayAsync().ConfigureAwait(false);
 		var realms = await context.Realms.AsNoTracking()

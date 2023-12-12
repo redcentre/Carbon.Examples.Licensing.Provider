@@ -16,14 +16,23 @@ partial class ExampleLicensingProvider
 	public async Task<Shared.Entities.Customer?> ReadCustomer(string id)
 	{
 		using var context = MakeContext();
-		var cust = await context.Customers.AsNoTracking().Include(c => c.Users).Include(c => c.Jobs).FirstOrDefaultAsync(c => c.Id.ToString() == id).ConfigureAwait(false);
+		var cust = await context.Customers.AsNoTracking()
+			.Include(c => c.Users)
+			.Include(c => c.Jobs)
+			.Include(c => c.Realms)
+			.FirstOrDefaultAsync(c => c.Id.ToString() == id)
+			.ConfigureAwait(false);
 		return ToCustomer(cust, true);
 	}
 
 	public async Task<Shared.Entities.Customer[]> ListCustomers()
 	{
 		using var context = MakeContext();
-		return await context.Customers.AsNoTracking().AsAsyncEnumerable().Select(c => ToCustomer(c, false)!).ToArrayAsync().ConfigureAwait(false);
+		return await context.Customers.AsNoTracking()
+			.AsAsyncEnumerable()
+			.Select(c => ToCustomer(c, false)!)
+			.ToArrayAsync()
+			.ConfigureAwait(false);
 	}
 
 	public async Task<Shared.Entities.Customer[]> ListCustomers(params string[] realmIds)
