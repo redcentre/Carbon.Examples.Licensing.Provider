@@ -2,9 +2,9 @@
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.ComponentModel.DataAnnotations;
+using System.Diagnostics;
 using System.Linq;
 using System.Reflection;
-using System.Threading.Tasks;
 using RCS.Carbon.Licensing.Example.EFCore;
 using RCS.Carbon.Licensing.Shared;
 
@@ -48,6 +48,10 @@ public partial class ExampleLicensingProvider : ILicensingProvider
 			return $"{t.Name} {an.Version} - {desc}";
 		}
 	}
+
+	void Log(string message) => Trace.WriteLine($"\u25a0 {DateTime.Now:HH:mm:ss.fff} [{Environment.CurrentManagedThreadId}] {message}");
+
+	static string Join(params object[] values) => values == null ? "NULL" : "[" + string.Join(",", values) + "]";
 
 	ExampleContext MakeContext() => new(_connect);
 

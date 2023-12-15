@@ -79,7 +79,7 @@ partial class ExampleLicensingProvider
 
 	public async Task<string[]> ValidateRealm(string realmId)
 	{
-		return await Task.FromResult(Array.Empty<string>());	// Not used
+		return await Task.FromResult(Array.Empty<string>());    // Not used
 	}
 
 	public async Task<Shared.Entities.Realm?> ConnectRealmChildUsers(string realmId, string[] userIds)

@@ -17,14 +17,22 @@ partial class ExampleLicensingProvider
 	{
 		int id = int.Parse(jobId);
 		using var context = MakeContext();
-		var job = await context.Jobs.AsNoTracking().Include(j => j.Customer).Include(j => j.Users).FirstOrDefaultAsync(j => j.Id == id).ConfigureAwait(false);
+		var job = await context.Jobs.AsNoTracking()
+			.Include(j => j.Customer)
+			.Include(j => j.Users)
+			.FirstOrDefaultAsync(j => j.Id == id)
+			.ConfigureAwait(false);
 		return ToJob(job, true);
 	}
 
 	public async Task<Shared.Entities.Job[]> ListJobs()
 	{
 		using var context = MakeContext();
-		return await context.Jobs.AsNoTracking().AsAsyncEnumerable().Select(j => ToJob(j, true)!).ToArrayAsync().ConfigureAwait(false);
+		return await context.Jobs.AsNoTracking()
+			.AsAsyncEnumerable()
+			.Select(j => ToJob(j, true)!)
+			.ToArrayAsync()
+			.ConfigureAwait(false);
 	}
 
 	public async Task<Shared.Entities.Job> UpdateJob(Shared.Entities.Job job)
@@ -135,34 +143,115 @@ partial class ExampleLicensingProvider
 		return await context.SaveChangesAsync().ConfigureAwait(false);
 	}
 
+	/// <summary>
+	/// Connects a Job to Users.
+	/// </summary>
+	/// <remarks>
+	/// CANONICAL -- If connecting a Job⮞User results in the User being connected to all Jobs of the parent Customer,
+	/// then the new connect is redundant and all previous connections to the Customer's Jobs are removed and replaced with
+	/// a single Customer⮞User connection.
+	/// </remarks>
 	public async Task<Shared.Entities.Job?> ConnectJobChildUsers(string jobId, string[] userIds)
 	{
-		int id = int.Parse(jobId);
+		Log($"ConnectJobChildUsers({jobId},{Join(userIds)})");
+		int jid = int.Parse(jobId);
+		int[] uids = userIds.Select(x => int.Parse(x)).ToArray();
 		using var context = MakeContext();
-		var job = await context.Jobs.Include(j => j.Users).FirstOrDefaultAsync(j => j.Id.ToString() == jobId).ConfigureAwait(false);
+		var job = await context.Jobs
+			.FirstOrDefaultAsync(j => j.Id == jid);
 		if (job == null) return null;
-		var addusers = context.Users.Where(j => userIds.Contains(j.Id.ToString())).ToArray();
-		foreach (var adduser in addusers)
+		var cust = context.Customers
+			.Include(c => c.Jobs)
+			.First(c => c.Id == job.CustomerId);
+		Debug.Assert(cust != null);
+		int[] allCustJids = cust.Jobs.Select(j => j.Id).ToArray();
+		var userquery = context.Users
+			.Include(u => u.Customers)
+			.Include(u => u.Jobs)
+			.Where(u => uids.Contains(u.Id));
+		foreach (var user in userquery)
 		{
-			job.Users.Add(adduser);
+			int[] newUserJobIds = user.Jobs.Select(j => j.Id).Concat(new int[] { jid }).Distinct().ToArray();
+			// Do the new job ids contain all of the customer's child job ids? (TRICKY)
+			if (newUserJobIds.Intersect(allCustJids).Count() == allCustJids.Length)
+			{
+				var remjobs = user.Jobs.Where(uj => allCustJids.Contains(uj.Id)).ToArray();
+				foreach (var remjob in remjobs)
+				{
+					Log($"ConnectJobChildUsers | User {user.Id} {user.Name} DEL Cust {remjob.Id} {remjob.Name}");
+					user.Jobs.Remove(remjob);
+				}
+				if (!user.Customers.Any(c => c.Id == cust.Id))
+				{
+					Log($"ConnectJobChildUsers | User {user.Id} {user.Name} ADD Cust {cust.Id} {cust.Name}");
+					user.Customers.Add(cust);
+				}
+			}
+			else
+			{
+				if (!user.Jobs.Any(j => j.Id == jid))
+				{
+					Log($"ConnectJobChildUsers | User {user.Id} {user.Name} ADD Job {job.Id} {job.Name}");
+					user.Jobs.Add(job);
+				}
+			}
 		}
 		await context.SaveChangesAsync().ConfigureAwait(false);
-		return await RereadJob(context, id).ConfigureAwait(false);
+		return await RereadJob(context, jid).ConfigureAwait(false);
 	}
 
+	/// <summary>
+	/// Disconnect a Job from a User.
+	/// </summary>
+	/// <remarks>
+	/// CANONICAL -- See the comments in DisconnectUserChildJob.
+	/// </remarks>
 	public async Task<Shared.Entities.Job?> DisconnectJobChildUser(string jobId, string userId)
 	{
-		int id = int.Parse(jobId);
+		Log($"DisconnectJobChildUser({jobId},{userId})");
+		int jid = int.Parse(jobId);
 		using var context = MakeContext();
-		var job = await context.Jobs.Include(c => c.Users).FirstOrDefaultAsync(j => j.Id.ToString() == jobId).ConfigureAwait(false);
+		var job = await context.Jobs
+			.Include(c => c.Users)
+			.FirstOrDefaultAsync(j => j.Id.ToString() == jobId);
 		if (job == null) return null;
-		var user = job.Users.FirstOrDefault(u => u.Id.ToString() == userId);
-		if (user != null)
+		int uid = int.Parse(userId);
+		var user = context.Users
+			.Include(u => u.Customers)
+			.Include(u => u.Jobs)
+			.FirstOrDefault(u => u.Id == uid);
+		if (user == null) return null;
+		var cust = context.Customers
+			.Include(c => c.Jobs)
+			.First(c => c.Id == job.CustomerId);
+		var usercust = user.Customers.FirstOrDefault(c => c.Id == cust.Id);
+		if (usercust != null)
 		{
-			job.Users.Remove(user);
+			// The User is connected to the Job's parent Customer.
+			Debug.Assert(!user.Jobs.Any());
+			var addjobs = cust.Jobs.Where(j => j.Id != jid);
+			foreach (var addjob in addjobs)
+			{
+				Log($"DisconnectJobChildUser | User {user.Id} {user.Name} ADD Job {addjob.Id} {addjob.Name}");
+				user.Jobs.Add(addjob);
+			}
+			Log($"DisconnectJobChildUser | User {user.Id} {user.Name} DEL Cust {usercust.Id} {usercust.Name}");
+			user.Customers.Remove(usercust);
 		}
+		else
+		{
+			// The User is not connected to the Job's parent Customer.
+			// It can only have a set of Job connections (maybe empty).
+			var deljob = user.Jobs.FirstOrDefault(j => j.Id == jid);
+			if (deljob != null)
+			{
+				Log($"DisconnectJobChildUser | User {user.Id} {user.Name} ADD Job {deljob.Id} {deljob.Name}");
+				user.Jobs.Remove(deljob);
+			}
+		}
+
 		await context.SaveChangesAsync().ConfigureAwait(false);
-		return await RereadJob(context, id).ConfigureAwait(false);
+		return await RereadJob(context, jid).ConfigureAwait(false);
 	}
 
 	static async Task<Shared.Entities.Job?> RereadJob(ExampleContext context, int jobId)
