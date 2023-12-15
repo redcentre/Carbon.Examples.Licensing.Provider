@@ -194,6 +194,12 @@ partial class ExampleLicensingProvider
 					Log($"ConnectJobChildUsers | User {user.Id} {user.Name} ADD Job {job.Id} {job.Name}");
 					user.Jobs.Add(job);
 				}
+				var delcust = user.Customers.FirstOrDefault(c => c.Id == cust.Id);
+				if (delcust != null)
+				{
+					Log($"ConnectJobChildUsers | User {user.Id} {user.Name} DEL Cust {delcust.Id} {delcust.Name}");
+					user.Customers.Remove(delcust);
+				}
 			}
 		}
 		await context.SaveChangesAsync().ConfigureAwait(false);

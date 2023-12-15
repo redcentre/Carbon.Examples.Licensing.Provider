@@ -80,6 +80,24 @@ public class ExampleProviderTests : TestBase
 		Info($"All users count -> {users.Length}");
 	}
 
+	[TestMethod]
+	public async Task T100_Authenticate()
+	{
+		var prov = MakeProvider();
+		LicenceFull? licfull = await prov.LoginName("gfkeogh@gmail.com", "qwe123");
+		Info($"LoginName -> {licfull.Id} | {licfull.Name}");
+		foreach (var cust in licfull.Customers)
+		{
+			Info($"|  CUST {cust.Id} | {cust.Name} | {cust.DisplayName}");
+			foreach (var job in cust.Jobs)
+			{
+				Info($"|  |  JOB {job.Id} | {job.Name} | {job.DisplayName}");
+			}
+		}
+		int count = await prov.ReturnId(licfull.Id);
+		Info($"Return count -> {count}");
+	}
+
 	ILicensingProvider MakeProvider()
 	{
 		IConfiguration config = new ConfigurationBuilder()

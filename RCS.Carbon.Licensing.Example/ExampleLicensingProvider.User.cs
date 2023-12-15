@@ -202,8 +202,8 @@ partial class ExampleLicensingProvider
 	/// Connects a User to Jobs.
 	/// </summary>
 	/// <remarks>
-	/// CANONICAL -- If connecting a User⮞Job would result in the User being connected to all of a Customer's child Jobs,
-	/// then the set of Job connects becomes redundant and they are removed and replaced with a single User⮞Customer connect.
+	/// CANONICAL -- If connecting a User⮞Job results in some joins, then any existing connection
+	/// from the User to the Job's parent customer is redundant and can be removed.
 	/// </remarks>
 	public async Task<Shared.Entities.User?> ConnectUserChildJobs(string userId, string[] jobIds)
 	{
@@ -212,6 +212,7 @@ partial class ExampleLicensingProvider
 		int[] jids = jobIds.Select(j => int.Parse(j)).ToArray();
 		using var context = MakeContext();
 		var user = await context.Users
+			.Include(u => u.Customers)
 			.Include(u => u.Jobs)
 			.FirstOrDefaultAsync(u => u.Id.ToString() == userId)
 			.ConfigureAwait(false);
@@ -249,6 +250,12 @@ partial class ExampleLicensingProvider
 				{
 					Log($"ConnectUserChildJobs | User {user.Id} {user.Name} ADD Job {job.Id} {job.Name}");
 					user.Jobs.Add(job);
+				}
+				var delcust = user.Customers.FirstOrDefault(c => c.Id == cust.Id);
+				if (delcust != null)
+				{
+					Log($"ConnectUserChildJobs | User {user.Id} {user.Name} DEL Cust {delcust.Id} {delcust.Name}");
+					user.Customers.Remove(delcust);
 				}
 			}
 		}
