@@ -74,13 +74,13 @@ The SQL Server database used by the example licensing provider can be hosted in 
 
 ### Local
 
-To create a local database, the simplest option is to use SSMS (SQL Server Management Studio) to connect to a local server and create a new database using defult values and a suitable folder. Run the script in the file `ExampleDatabase-Create.sql` to create the database schema and inset sample rows.
+To create a local database, the simplest option is to use SSMS (SQL Server Management Studio) to connect to a local server and create a new database using defult values and a suitable folder. Run the script in the file `ExampleDatabase-Create.sql` to create the database schema and insert sample rows.
 
 ### Azure
 
 Use the Azure subscription web portal to create a SQL Server, if a suitable one doesn't exist. Create a SQL Server database named `CarbonLicensingExample` in the server.
 
-Use SSMS to connect to the Azure database and run the script in `ExampleDatabase-Create.sql` to create the database schema and insert sample rows. The SSMS Server value will be in the format:
+Use SSMS to connect to the Azure database and run the script in `ExampleDatabase-Create.sql` to create the database schema and insert sample rows. The SSMS *Server* value will be in the format:
 
 ```
 tcp:{SERVERNAME}.database.windows.net,1433
