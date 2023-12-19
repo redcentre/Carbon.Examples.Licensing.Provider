@@ -63,15 +63,19 @@ partial class ExampleLicensingProvider
 	{
 		int id = int.Parse(realmId);
 		using var context = MakeContext();
-		var realm = await context.Realms.Include(r => r.Users).Include(r => r.Users).FirstOrDefaultAsync(r => r.Id == id).ConfigureAwait(false);
+		var realm = await context.Realms
+			.Include(r => r.Users)
+			.Include(r => r.Customers)
+			.FirstOrDefaultAsync(r => r.Id == id)
+			.ConfigureAwait(false);
 		if (realm == null) return 0;
 		foreach (var user in realm.Users.ToArray())
 		{
 			realm.Users.Remove(user);
 		}
-		foreach (var cust in realm.Users.ToArray())
+		foreach (var cust in realm.Customers.ToArray())
 		{
-			realm.Users.Remove(cust);
+			realm.Customers.Remove(cust);
 		}
 		context.Realms.Remove(realm);
 		return await context.SaveChangesAsync().ConfigureAwait(false);

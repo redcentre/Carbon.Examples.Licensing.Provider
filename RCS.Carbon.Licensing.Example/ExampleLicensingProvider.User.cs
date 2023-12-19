@@ -117,7 +117,12 @@ partial class ExampleLicensingProvider
 	{
 		int id = int.Parse(userId);
 		using var context = MakeContext();
-		var user = await context.Users.Include(u => u.Customers).Include(u => u.Jobs).FirstOrDefaultAsync(u => u.Id == id).ConfigureAwait(false);
+		var user = await context.Users
+			.Include(u => u.Customers)
+			.Include(u => u.Jobs)
+			.Include(u => u.Realms)
+			.FirstOrDefaultAsync(u => u.Id == id)
+			.ConfigureAwait(false);
 		if (user == null) return 0;
 		foreach (var job in user.Jobs.ToArray())
 		{
@@ -126,6 +131,10 @@ partial class ExampleLicensingProvider
 		foreach (var cust in user.Customers.ToArray())
 		{
 			user.Customers.Remove(cust);
+		}
+		foreach (var realm in user.Realms.ToArray())
+		{
+			user.Realms.Remove(realm);
 		}
 		context.Users.Remove(user);
 		return await context.SaveChangesAsync().ConfigureAwait(false);

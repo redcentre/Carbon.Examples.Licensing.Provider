@@ -133,7 +133,10 @@ partial class ExampleLicensingProvider
 	{
 		int id = int.Parse(jobId);
 		using var context = MakeContext();
-		var job = await context.Jobs.Include(j => j.Users).FirstOrDefaultAsync(j => j.Id == id).ConfigureAwait(false);
+		var job = await context.Jobs
+			.Include(j => j.Users)
+			.FirstOrDefaultAsync(j => j.Id == id)
+			.ConfigureAwait(false);
 		if (job == null) return 0;
 		foreach (var user in job.Users.ToArray())
 		{

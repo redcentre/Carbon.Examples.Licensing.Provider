@@ -118,7 +118,12 @@ partial class ExampleLicensingProvider
 	public async Task<int> DeleteCustomer(string id)
 	{
 		using var context = MakeContext();
-		var cust = await context.Customers.Include(c => c.Jobs).Include(c => c.Users).FirstOrDefaultAsync(c => c.Id == int.Parse(id)).ConfigureAwait(false);
+		var cust = await context.Customers
+			.Include(c => c.Jobs)
+			.Include(c => c.Users)
+			.Include(c => c.Realms)
+			.FirstOrDefaultAsync(c => c.Id == int.Parse(id))
+			.ConfigureAwait(false);
 		if (cust == null) return 0;
 		foreach (var job in cust.Jobs.ToArray())
 		{
@@ -129,6 +134,10 @@ partial class ExampleLicensingProvider
 		foreach (var user in cust.Users.ToArray())
 		{
 			cust.Users.Remove(user);
+		}
+		foreach (var realm in cust.Realms.ToArray())
+		{
+			cust.Realms.Remove(realm);
 		}
 		context.Customers.Remove(cust);
 		return await context.SaveChangesAsync().ConfigureAwait(false);
