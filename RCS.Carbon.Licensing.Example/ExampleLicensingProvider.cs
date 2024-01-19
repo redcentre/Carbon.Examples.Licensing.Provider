@@ -5,6 +5,7 @@ using System.ComponentModel.DataAnnotations;
 using System.Diagnostics;
 using System.Linq;
 using System.Reflection;
+using System.Threading.Tasks;
 using RCS.Carbon.Licensing.Example.EFCore;
 using RCS.Carbon.Licensing.Shared;
 
