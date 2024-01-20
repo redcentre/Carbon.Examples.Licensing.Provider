@@ -45,7 +45,7 @@ partial class ExampleLicensingProvider
 	}
 
 	readonly List<UploadTData> uploadList = new();
-	XDocument mimedoc;
+	XDocument? mimedoc;
 
 	public async Task<int> StartJobUpload(UploadParameters parameters, IProgress<string> progress)
 	{
@@ -123,7 +123,7 @@ partial class ExampleLicensingProvider
 		var po = new ParallelOptions() { CancellationToken = data.CTS.Token, MaxDegreeOfParallelism = Math.Min(MaxParallelUploads, Environment.ProcessorCount) };
 		try
 		{
-			await Parallel.ForEachAsync(dirsources, po, async (f, t) =>
+			await Parallel.ForEachAsync(dirsources, po, async (f, ct) =>
 			{
 				string fixname = NameAdjust(f.FullName);
 				string blobname = fixname[sourceRootPfxLen..].Replace(Path.DirectorySeparatorChar, '/');
@@ -137,18 +137,18 @@ partial class ExampleLicensingProvider
 						{
 							Interlocked.Increment(ref skipCount);
 							Interlocked.Add(ref skipBytes, f.Length);
-							data.Progress.Report($"SKIP|{blobname}|{f.Length}|{f.LastWriteTimeUtc:s}|{tup.Modified:s}");
+							data.Progress.Report($"SKIP|{blobname}|{f.Length}|{f.LastWriteTimeUtc:s}|{tup.Modified:s}|{Environment.CurrentManagedThreadId}");
 							return;
 						}
 					}
 				}
 				using var reader = new FileStream(f.FullName, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
-				data.Progress.Report($"UPLOAD|{blobname}|{f.Length}");
+				data.Progress.Report($"UPLOAD|{blobname}|{f.Length}|{Environment.CurrentManagedThreadId}");
 				#region ----- Calculate the mime-type -----
 				// Lookup the extension in the public XML document, then fallback to a slightly
 				// clumsy probe of the bytes at the start of the file to see if contains a well-known
 				// BOM or if it contains any controls characters not in text files.
-				XElement? extelem = mimedoc.Root!.Elements("type").SelectMany(e => e.Elements("ext")).FirstOrDefault(e => string.Compare((string)e, f.Extension, StringComparison.OrdinalIgnoreCase) == 0);
+				XElement? extelem = mimedoc!.Root!.Elements("type").SelectMany(e => e.Elements("ext")).FirstOrDefault(e => string.Compare((string)e, f.Extension, StringComparison.OrdinalIgnoreCase) == 0);
 				string? mimetype = (string?)extelem?.Parent!.Attribute("name");
 				if (mimetype == null)
 				{
@@ -187,7 +187,7 @@ partial class ExampleLicensingProvider
 					HttpHeaders = new BlobHttpHeaders() { ContentType = mimetype }
 				};
 				var bc = cc.GetBlobClient(blobname);
-				await bc.UploadAsync(reader, upopts, data.CTS.Token);
+				await bc.UploadAsync(reader, upopts, ct);
 				Interlocked.Increment(ref uploadCount);
 				Interlocked.Add(ref uploadBytes, reader.Length);
 			});

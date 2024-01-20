@@ -83,6 +83,8 @@ partial class ExampleLicensingProvider
 
 	public async Task<bool> ResetPassword(string email, DateTime utcTime, int signature)
 	{
+		// TODO Implement ResetPassword once the plaintext password is removed.
+		await Task.CompletedTask;
 		return true;
 	}
 

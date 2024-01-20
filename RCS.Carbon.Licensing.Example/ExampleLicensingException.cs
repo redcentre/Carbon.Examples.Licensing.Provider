@@ -12,6 +12,7 @@ public enum LicensingErrorType
 	CustomerNotFound,
 	JobNotFound,
 	JobUploadRunning,
+	JobDownloadRunning,
 	JobOrphaned
 }
 
