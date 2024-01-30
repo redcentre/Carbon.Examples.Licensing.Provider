@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using Azure;
@@ -32,6 +33,10 @@ partial class ExampleLicensingProvider
 
 	const int MaxParallelDownloads = 4;
 	readonly List<DownloadTData> downloadList = new();
+	Regex[] includeFoldersRegs;
+	Regex[] excludeFoldersRegs;
+	Regex[] includeFilesRegs;
+	Regex[] excludeFilesRegs;
 
 	public async Task<int> StartJobDownload(DownloadParameters parameters, IProgress<string> progress)
 	{
@@ -50,6 +55,16 @@ partial class ExampleLicensingProvider
 	async void DownloadProc(object o)
 	{
 		var data = (DownloadTData)o;
+		static string FromGlob(string s)
+		{
+			s = s.Replace(".", "\\.");
+			s = s.Replace("*", ".*");
+			return s.Replace("?", ".");
+		}
+		includeFoldersRegs = data.Parameters.IncludeFolders?.Select(x => new Regex(Regex.Escape(x), RegexOptions.IgnoreCase)).ToArray() ?? Array.Empty<Regex>();
+		excludeFoldersRegs = data.Parameters.ExcludeFolders?.Select(x => new Regex(Regex.Escape(x), RegexOptions.IgnoreCase)).ToArray() ?? Array.Empty<Regex>();
+		includeFilesRegs = data.Parameters.IncludeFileGlobs?.Select(x => new Regex(FromGlob(x), RegexOptions.IgnoreCase)).ToArray() ?? Array.Empty<Regex>();
+		excludeFilesRegs = data.Parameters.ExcludeFileGlobs?.Select(x => new Regex(FromGlob(x), RegexOptions.IgnoreCase)).ToArray() ?? Array.Empty<Regex>();
 
 		data.Progress.Report($"START|{MaxParallelDownloads}|{data.JobId}|{data.JobName}|{data.Parameters.Destination.FullName}");
 		int downloadCount = 0;
@@ -65,6 +80,10 @@ partial class ExampleLicensingProvider
 			await Parallel.ForEachAsync(blobSource, po, async (bi, ct) =>
 			{
 				ct.ThrowIfCancellationRequested();
+				if (!PassesFilter(bi, data.Parameters))
+				{
+					return;
+				}
 				var bc = cc.GetBlobClient(bi.Name);
 				string filename = Path.Combine(data.Parameters.Destination.FullName, bi.Name.Replace('/', Path.DirectorySeparatorChar));
 				if (data.Parameters.NewAndChangedOnly)
@@ -110,6 +129,19 @@ partial class ExampleLicensingProvider
 		data.IsRunning = false;
 		var secs = data.EndTime.Value.Subtract(data.StartTime).TotalSeconds;
 		data.Progress.Report($"END|{downloadCount}|{downloadBytes}|{skipCount}|{skipBytes}|{secs:F1}");
+	}
+
+	bool PassesFilter(BlobItem bi, DownloadParameters parameters)
+	{
+		int ix = bi.Name.LastIndexOf('/');
+		string? vdir = ix > 0 ? bi.Name[..ix] : null;
+		string name = ix > 0 ? bi.Name[(ix + 1)..] : bi.Name;
+		bool passIncFolder = includeFoldersRegs.Length == 0 || includeFoldersRegs.Any(r => r.IsMatch(vdir ?? ""));
+		bool failExcFolder = excludeFoldersRegs.Length > 0 && excludeFoldersRegs.Any(r => r.IsMatch(vdir ?? ""));
+		bool passIncFile = includeFilesRegs.Length == 0 || includeFilesRegs.Any(r => r.IsMatch(name));
+		bool failExcFile = excludeFilesRegs.Length > 0 && excludeFilesRegs.Any(r => r.IsMatch(name));
+		if (failExcFolder || failExcFile) return false;
+		return passIncFolder && passIncFile;
 	}
 
 	static async IAsyncEnumerable<BlobItem> WalkBlobs(BlobContainerClient cc)
