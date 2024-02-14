@@ -3,9 +3,13 @@ using System.Collections.Generic;
 using System.ComponentModel;
 using System.ComponentModel.DataAnnotations;
 using System.Diagnostics;
+using System.IO;
 using System.Linq;
 using System.Reflection;
 using System.Threading.Tasks;
+using Azure;
+using Azure.Storage.Blobs;
+using Azure.Storage.Blobs.Models;
 using RCS.Carbon.Licensing.Example.EFCore;
 using RCS.Carbon.Licensing.Shared;
 
@@ -60,12 +64,12 @@ public partial class ExampleLicensingProvider : ILicensingProvider
 	/// A deep loaded User from the example database is converted into a Carbon full licence.
 	/// The example rows only contain mimimal data, so a lot of the return properties are null and unused.
 	/// </summary>
-	LicenceFull UserToFull(User user)
+	async Task<LicenceFull> UserToFull(User user)
 	{
 		Customer[] custs = user.Customers.Concat(user.Jobs.Select(j => j.Customer)).Distinct(new CustomerComparer()).ToArray();
 		Job[] jobs = user.Jobs.Concat(user.Customers.SelectMany(c => c.Jobs)).Distinct(new JobComparer()).ToArray();
 		string s = $"{user.Id}+{user.Name}+{DateTime.UtcNow:s}";
-		return new LicenceFull()
+		var licfull = new LicenceFull()
 		{
 			Id = user.Id.ToString(),
 			Name = user.Name,
@@ -121,10 +125,53 @@ public partial class ExampleLicensingProvider : ILicensingProvider
 					Logo = j.Logo,
 					Sequence = j.Sequence,
 					Url = j.Url,
-					VartreeNames = j.VartreeNames?.Split(",; ".ToArray()),
+					VartreeNames = j.VartreeNames?.Split(",; ".ToArray())
 				}).ToArray()
 			}).ToArray()
 		};
+
+		// The real vartree names are added to the licensing response. This is the only place
+		// where licensing does processing outside its own data. The names of real vartree (*.vtr)
+		// blobs can only be found by scanning the root blobs in each job's container, which is
+		// done in parallel to minimise delays.
+
+		var tasks = licfull.Customers
+			.Where(c => c.StorageKey != null)
+			.SelectMany(c => c.Jobs.Select(j => new { c, j }))
+			.Select(x => ScanJobForVartreesAsync(x.c.StorageKey, x.j));
+		await Task.WhenAll(tasks);
+
+		return licfull;
+	}
+
+	async Task ScanJobForVartreesAsync(string storageConnect, LicenceJob job)
+	{
+		var cc = new BlobContainerClient(storageConnect, job.Name);
+		// A job's container does not contain many root blobs where the vartrees are stored.
+		// A single call is expected to return all root blobs without the need for continue token looping.
+		IAsyncEnumerable<Page<BlobHierarchyItem>> pages = cc.GetBlobsByHierarchyAsync(delimiter: "/", prefix: null).AsPages(null);
+		var list = new List<string>();
+		try
+		{
+			await foreach (Page<BlobHierarchyItem> page in pages)
+			{
+				foreach (BlobHierarchyItem bhi in page.Values.Where(b => b.IsBlob))
+				{
+					string blobext = Path.GetExtension(bhi.Blob.Name);
+					if (string.Compare(blobext, ".vtr", StringComparison.OrdinalIgnoreCase) == 0)
+					{
+						list.Add(Path.GetFileNameWithoutExtension(bhi.Blob.Name));
+					}
+				}
+			}
+			job.IsAccessible = true;
+		}
+		catch (RequestFailedException ex)
+		{
+			Trace.WriteLine($"@@@@ ERROR Status {ex.Status} ErrorCode {ex.ErrorCode} - {ex.Message}");
+			job.IsAccessible = false;
+		}
+		job.RealCloudVartreeNames = list.ToArray();
 	}
 
 	static Shared.Entities.Customer? ToCustomer(Customer? cust, bool includeChildren)

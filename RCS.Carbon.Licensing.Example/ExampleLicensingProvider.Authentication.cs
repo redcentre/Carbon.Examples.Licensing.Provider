@@ -27,7 +27,7 @@ partial class ExampleLicensingProvider
 		{
 			throw new ExampleLicensingException(LicensingErrorType.PasswordIncorrect, $"User Id '{userId}' incorrect password");
 		}
-		return UserToFull(user);
+		return await UserToFull(user);
 	}
 
 	public async Task<LicenceFull> LoginName(string userName, string? password, bool skipCache = false)
@@ -43,7 +43,7 @@ partial class ExampleLicensingProvider
 		{
 			throw new ExampleLicensingException(LicensingErrorType.PasswordIncorrect, $"User Name '{userName}' incorrect password");
 		}
-		return UserToFull(user);
+		return await UserToFull(user);
 	}
 
 	public async Task<LicenceFull> GetFreeLicence(string? clientIdentifier = null, bool skipCache = false)
@@ -55,7 +55,7 @@ partial class ExampleLicensingProvider
 			.FirstOrDefaultAsync(u => u.Name == GuestAccountName);
 		return user == null
 			? throw new ExampleLicensingException(LicensingErrorType.IdentityNotFound, $"Free or guest account with Name {GuestAccountName} does not exist")
-			: UserToFull(user);
+			: await UserToFull(user);
 	}
 
 	public async Task<int> LogoutId(string userId)

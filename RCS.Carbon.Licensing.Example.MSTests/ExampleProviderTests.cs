@@ -91,7 +91,9 @@ public class ExampleProviderTests : TestBase
 			Info($"|  CUST {cust.Id} | {cust.Name} | {cust.DisplayName}");
 			foreach (var job in cust.Jobs)
 			{
-				Info($"|  |  JOB {job.Id} | {job.Name} | {job.DisplayName}");
+				string vtrs = string.Format("[{0}]", string.Join(',', job.VartreeNames));
+				string? reals = job.RealCloudVartreeNames == null ? null : string.Format("[{0}]", string.Join(',', job.RealCloudVartreeNames));
+				Info($"|  |  JOB {job.Id} | {job.Name} | {job.DisplayName} • {vtrs} • {reals}");
 			}
 		}
 		int count = await prov.ReturnId(licfull.Id);

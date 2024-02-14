@@ -1,9 +1,12 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
+using Azure;
 using Azure.Storage.Blobs;
+using Azure.Storage.Blobs.Models;
 using Microsoft.EntityFrameworkCore;
 using RCS.Carbon.Licensing.Example.EFCore;
 
@@ -75,7 +78,7 @@ partial class ExampleLicensingProvider
 		row.Name = job.Name;
 		row.DataLocation = (int?)job.DataLocation;
 		row.DisplayName = job.DisplayName;
-		row.CustomerId = job.CustomerId?.Length > 0 ? int.Parse(job.CustomerId) : (int?)null;
+		row.CustomerId = job.CustomerId?.Length > 0 ? int.Parse(job.CustomerId) : null;
 		row.Description = job.Description;
 		row.Sequence = job.Sequence;
 		row.Cases = job.Cases;
@@ -261,6 +264,48 @@ partial class ExampleLicensingProvider
 
 		await context.SaveChangesAsync().ConfigureAwait(false);
 		return await RereadJob(context, jid).ConfigureAwait(false);
+	}
+
+	/// <summary>
+	/// Gets a list of the 'real' vartree (*.vtr) blobs in the root of a job's container.
+	/// </summary>
+	/// <remarks>
+	/// Note that this method is somewhat unusual because it combines information about a job and
+	/// its parent customer to read the blobs in an actual container. The returned names are useful
+	/// in some high-level tools to manage licensing.
+	/// </remarks>
+	public async Task<string[]?> GetRealCloudVartreeNames(string jobId)
+	{
+		using var context = MakeContext();
+		int jid = int.Parse(jobId);
+		var job = context.Jobs
+			.Include(j => j.Customer)
+			.FirstOrDefault(j => j.Id == jid);
+		if (job?.Customer?.StorageKey == null) return null;
+		var cc = new BlobContainerClient(job.Customer.StorageKey, job.Name);
+		if (!await cc.ExistsAsync()) return null;
+		IAsyncEnumerable<Page<BlobHierarchyItem>> pages = cc.GetBlobsByHierarchyAsync(delimiter: "/", prefix: null).AsPages(null);
+		var list = new List<string>();
+		try
+		{
+			await foreach (Page<BlobHierarchyItem> page in pages)
+			{
+				foreach (BlobHierarchyItem bhi in page.Values.Where(b => b.IsBlob))
+				{
+					string blobext = Path.GetExtension(bhi.Blob.Name);
+					if (string.Compare(blobext, ".vtr", StringComparison.OrdinalIgnoreCase) == 0)
+					{
+						list.Add(Path.GetFileNameWithoutExtension(bhi.Blob.Name));
+					}
+				}
+			}
+		}
+		catch (RequestFailedException ex)
+		{
+			Trace.WriteLine($"@@@@ ERROR Status {ex.Status} ErrorCode {ex.ErrorCode} - {ex.Message}");
+		}
+		return list.ToArray();
+
 	}
 
 	static async Task<Shared.Entities.Job?> RereadJob(ExampleContext context, int jobId)
