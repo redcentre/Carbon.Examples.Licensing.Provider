@@ -6,6 +6,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using Azure;
 using Azure.Storage.Blobs;
@@ -24,7 +25,7 @@ namespace RCS.Carbon.Licensing.Example;
 public partial class ExampleLicensingProvider : ILicensingProvider
 {
 	readonly string _prodkey;
-	readonly string? _connect;
+	readonly string _connect;
 
 	[Description("Example licensing provider using a SQL Server database")]
 	public ExampleLicensingProvider(
@@ -51,6 +52,18 @@ public partial class ExampleLicensingProvider : ILicensingProvider
 			var an = asm.GetName();
 			var desc = asm.GetCustomAttribute<AssemblyDescriptionAttribute>()!.Description;
 			return $"{t.Name} {an.Version} - {desc}";
+		}
+	}
+
+	public string ConfigSummary
+	{
+		get
+		{
+			var m = Regex.Match(_connect, "(?:Server|Data Source)=([^;]+)", RegexOptions.IgnoreCase);
+			string server = m.Success ? m.Groups[1].Value : "(SERVER?)";
+			m = Regex.Match(_connect, "(?:database|initial catalog)=([^;]+)", RegexOptions.IgnoreCase);
+			string database = m.Success ? m.Groups[1].Value : "(DATABASE?)";
+			return $"{server};{database};{_prodkey}";
 		}
 	}
 
@@ -126,6 +139,8 @@ public partial class ExampleLicensingProvider : ILicensingProvider
 					Sequence = j.Sequence,
 					Url = j.Url,
 					VartreeNames = j.VartreeNames?.Split(",; ".ToArray())
+					//RealCloudVartreeNames -> Filled by loop below
+					//IsAccessible -> Filled by loop below
 				}).ToArray()
 			}).ToArray()
 		};
@@ -144,7 +159,7 @@ public partial class ExampleLicensingProvider : ILicensingProvider
 		return licfull;
 	}
 
-	async Task ScanJobForVartreesAsync(string storageConnect, LicenceJob job)
+	static async Task ScanJobForVartreesAsync(string storageConnect, LicenceJob job)
 	{
 		var cc = new BlobContainerClient(storageConnect, job.Name);
 		// A job's container does not contain many root blobs where the vartrees are stored.
