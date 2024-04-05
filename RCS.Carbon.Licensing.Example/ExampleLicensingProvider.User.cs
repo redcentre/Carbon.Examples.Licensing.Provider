@@ -78,7 +78,8 @@ partial class ExampleLicensingProvider
 		}
 		else
 		{
-			row = await context.Users.FirstAsync(u => u.Id.ToString() == user.Id) ?? throw new ExampleLicensingException(LicensingErrorType.IdentityNotFound, $"User Id {user.Id} not found for update");
+			int uid = int.Parse(user.Id);
+			row = await context.Users.FirstAsync(u => u.Id == uid) ?? throw new ExampleLicensingException(LicensingErrorType.IdentityNotFound, $"User Id {user.Id} not found for update");
 			if (row.Uid == Guid.Empty)
 			{
 				row.Uid = Guid.NewGuid();
@@ -141,6 +142,31 @@ partial class ExampleLicensingProvider
 	}
 
 	/// <summary>
+	/// Disconnects a User from a Customer.
+	/// </summary>
+	/// <remarks>
+	/// CANONICAL -- None required. There should be no connections to Customer child Jobs, and even if
+	/// there are then it's harmless to let them remain an they can be dealt with separately.
+	/// </remarks>
+	public async Task<Shared.Entities.User?> DisconnectUserChildCustomer(string userId, string customerId)
+	{
+		Log($"DisconnectUserChildCustomer({userId},{customerId})");
+		int uid = int.Parse(userId);
+		using var context = MakeContext();
+		var user = await context.Users.Include(u => u.Customers).FirstOrDefaultAsync(u => u.Id == uid).ConfigureAwait(false);
+		if (user == null) return null;
+		int cid = int.Parse(customerId);
+		var cust = user.Customers.FirstOrDefault(c => c.Id == cid);
+		if (cust != null)
+		{
+			Log($"DisconnectUserChildCustomer | User {user.Id} {user.Name} DEL Cust {cust.Id} {cust.Name}");
+			user.Customers.Remove(cust);
+		}
+		await context.SaveChangesAsync().ConfigureAwait(false);
+		return await RereadUser(context, uid);
+	}
+
+	/// <summary>
 	/// Connects a User to Customers.
 	/// </summary>
 	/// <remarks>
@@ -167,14 +193,14 @@ partial class ExampleLicensingProvider
 		{
 			if (!cust.Users.Any(cu => cu.Id == uid))
 			{
-				Log($"ConnectJobChildUsers | Cust {cust.Id} {cust.Name} ADD User {user.Id} {user.Name}");
+				Log($"ConnectUserChildCustomers | Cust {cust.Id} {cust.Name} ADD User {user.Id} {user.Name}");
 				cust.Users.Add(user);
 			}
 			int[] custjids = cust.Jobs.Select(j => j.Id).ToArray();
 			var deljobs = user.Jobs.Where(j => custjids.Contains(j.Id)).ToArray();
 			foreach (var deljob in deljobs)
 			{
-				Log($"ConnectJobChildUsers | User {user.Id} {user.Name} DEL Job {deljob.Id} {deljob.Name}");
+				Log($"ConnectUserChildCustomers | User {user.Id} {user.Name} DEL Job {deljob.Id} {deljob.Name}");
 				user.Jobs.Remove(deljob);
 			}
 		}
@@ -182,29 +208,95 @@ partial class ExampleLicensingProvider
 		return await RereadUser(context, uid);
 	}
 
-	/// <summary>
-	/// Disconnects a User from a Customer.
-	/// </summary>
-	/// <remarks>
-	/// CANONICAL -- None required. There should be no connections to Customer child Jobs, and even if
-	/// there are then it's harmless to let them remain an they can be dealt with separately.
-	/// </remarks>
-	public async Task<Shared.Entities.User?> DisconnectUserChildCustomer(string userId, string customerId)
+	public async Task<Shared.Entities.User?> ReplaceUserChildCustomers(string userId, string[] customerIds)
 	{
-		Log($"DisconnectUserChildCustomer({userId},{customerId})");
-		int id = int.Parse(userId);
+		Log($"ReplaceUserChildCustomers({userId},{Join(customerIds)})");
+		int uid = int.Parse(userId);
 		using var context = MakeContext();
-		var user = await context.Users.Include(u => u.Customers).FirstOrDefaultAsync(u => u.Id.ToString() == userId).ConfigureAwait(false);
+		var user = await context.Users
+			.Include(u => u.Customers)
+			.Include(u => u.Jobs)
+			.FirstOrDefaultAsync(u => u.Id == uid)
+			.ConfigureAwait(false);
 		if (user == null) return null;
-		int cid = int.Parse(customerId);
-		var cust = user.Customers.FirstOrDefault(c => c.Id == cid);
-		if (cust != null)
+		int[] cids = customerIds.Select(x => int.Parse(x)).ToArray();
+		var custquery = context.Customers
+			.Include(c => c.Users)
+			.Include(c => c.Jobs)
+			.Where(c => cids.Contains(c.Id));
+		// Replace all User ⮞ Customers
+		user.Customers.Clear();
+		foreach (var cust in custquery)
 		{
-			Log($"DisconnectUserChildCustomer | User {user.Id} {user.Name} DEL Cust {cust.Id} {cust.Name}");
-			user.Customers.Remove(cust);
+			Log($"ReplaceUserChildCustomers | User {user.Id} {user.Name} ADD Cust {cust.Id} {cust.Name}");
+			user.Customers.Add(cust);
+		}
+		// Any User ⮞ Job that are children of the added customers are redundant and must be removed.
+		int[] custjobids = custquery.SelectMany(c => c.Jobs.Select(j => j.Id)).Distinct().ToArray();
+		int[] userjobids = user.Jobs.Select(j => j.Id).ToArray();
+		int[] deljobids = userjobids.Intersect(custjobids).ToArray();
+		var deljobs = await context.Jobs.AsNoTracking().Where(j => deljobids.Contains(j.Id)).ToArrayAsync().ConfigureAwait(false);
+		foreach (var deljob in deljobs)
+		{
+			Log($"ReplaceUserChildCustomers | User {user.Id} {user.Name} DEL Job {deljob.Id} {deljob.Name}");
+			user.Jobs.Remove(deljob);
 		}
 		await context.SaveChangesAsync().ConfigureAwait(false);
-		return await RereadUser(context, id);
+		return await RereadUser(context, uid);
+	}
+
+	/// <summary>
+	/// Disconnect a User from a Job.
+	/// </summary>
+	/// <remarks>
+	/// CANONICAL -- This is a rather special case. If the User is not connected to a Customer then the Job
+	/// is simply removed from the set of User⮞Job connections. If the User is connected to a Customer then
+	/// there should not be any connections the Customer's child jobs, and in this case a set of Job connections
+	/// is created which excludes the disconnecting job.
+	/// </remarks>
+	public async Task<Shared.Entities.User?> DisconnectUserChildJob(string userId, string jobId)
+	{
+		Log($"DisconnectUserChildJob({userId},{jobId})");
+		int uid = int.Parse(userId);
+		using var context = MakeContext();
+		var user = await context.Users
+			.Include(c => c.Jobs)
+			.FirstOrDefaultAsync(u => u.Id == uid);
+		if (user == null) return null;
+		int jid = int.Parse(jobId);
+		var job = context.Jobs.First(j => j.Id == jid);
+		if (job == null) return null;
+		var cust = context.Customers
+			.Include(c => c.Jobs)
+			.First(c => c.Id == job.CustomerId);
+		if (user.Customers.Any(uc => uc.Id == cust.Id))
+		{
+			// The User is connected to the Job's parent Customer.
+			Debug.Assert(!user.Jobs.Any());
+			var addjobs = cust.Jobs.Where(j => j.Id != jid);
+			foreach (var addjob in addjobs)
+			{
+				Log($"DisconnectUserChildJob | User {user.Id} {user.Name} ADD Job {addjob.Id} {addjob.Name}");
+				user.Jobs.Add(addjob);
+			}
+			var delcust = user.Customers.First(c => c.Id == cust.Id);
+			Log($"DisconnectUserChildJob | User {user.Id} {user.Name} DEL Cust {delcust.Id} {delcust.Name}");
+			user.Customers.Remove(delcust);
+		}
+		else
+		{
+			// The User is not connected to the Job's parent Customer.
+			// It can only have a set of Job connections (maybe empty).
+			var deljob = user.Jobs.FirstOrDefault(j => j.Id == jid);
+			if (deljob != null)
+			{
+				Log($"DisconnectUserChildJob | User {user.Id} {user.Name} ADD Job {deljob.Id} {deljob.Name}");
+				user.Jobs.Remove(deljob);
+			}
+		}
+
+		await context.SaveChangesAsync().ConfigureAwait(false);
+		return await RereadUser(context, uid);
 	}
 
 	/// <summary>
@@ -218,14 +310,14 @@ partial class ExampleLicensingProvider
 	{
 		Log($"ConnectUserChildJobs({userId},{Join(jobIds)})");
 		int uid = int.Parse(userId);
-		int[] jids = jobIds.Select(j => int.Parse(j)).ToArray();
 		using var context = MakeContext();
 		var user = await context.Users
 			.Include(u => u.Customers)
 			.Include(u => u.Jobs)
-			.FirstOrDefaultAsync(u => u.Id.ToString() == userId)
+			.FirstOrDefaultAsync(u => u.Id == uid)
 			.ConfigureAwait(false);
 		if (user == null) return null;
+		int[] jids = jobIds.Select(j => int.Parse(j)).ToArray();
 		var jobquery = context.Jobs
 			.Include(j => j.Users)
 			.Include(j => j.Customer)
@@ -272,63 +364,114 @@ partial class ExampleLicensingProvider
 		return await RereadUser(context, uid).ConfigureAwait(false);
 	}
 
-	/// <summary>
-	/// Disconnect a User from a Job.
-	/// </summary>
-	/// <remarks>
-	/// CANONICAL -- This is a rather special case. If the User is not connected to a Customer then the Job
-	/// is simply removed from the set of User⮞Job connections. If the User is connected to a Customer then
-	/// there should not be any connections the Customer's child jobs, and in this case a set of Job connections
-	/// is created which excludes the disconnecting job.
-	/// </remarks>
-	public async Task<Shared.Entities.User?> DisconnectUserChildJob(string userId, string jobId)
+	public async Task<Shared.Entities.User?> ReplaceUserChildJobs(string userId, string[] jobIds)
 	{
-		Log($"DisconnectUserChildJob({userId},{jobId})");
+		Log($"ReplaceUserChildJobs({userId},{Join(jobIds)})");
 		int uid = int.Parse(userId);
 		using var context = MakeContext();
 		var user = await context.Users
-			.Include(c => c.Jobs)
-			.FirstOrDefaultAsync(u => u.Id.ToString() == userId);
+			.Include(u => u.Customers)
+			.Include(u => u.Jobs)
+			.FirstOrDefaultAsync(u => u.Id == uid)
+			.ConfigureAwait(false);
 		if (user == null) return null;
-		int jid = int.Parse(jobId);
-		var job = context.Jobs.First(j => j.Id == jid);
-		if (job == null) return null;
-		var cust = context.Customers
-			.Include(c => c.Jobs)
-			.First(c => c.Id == job.CustomerId);
-		if (user.Customers.Any(uc => uc.Id == cust.Id))
+		int[] jids = jobIds.Select(j => int.Parse(j)).ToArray();
+		var jobquery = context.Jobs
+			.Include(j => j.Users)
+			.Include(j => j.Customer)
+			.Where(j => jids.Contains(j.Id))
+			.ToArray();
+		// Replace all User ⮞ Job joins
+		user.Jobs.Clear();
+		foreach (var job in jobquery)
 		{
-			// The User is connected to the Job's parent Customer.
-			Debug.Assert(!user.Jobs.Any());
-			var addjobs = cust.Jobs.Where(j => j.Id != jid);
-			foreach (var addjob in addjobs)
-			{
-				Log($"DisconnectUserChildJob | User {user.Id} {user.Name} ADD Job {addjob.Id} {addjob.Name}");
-				user.Jobs.Add(addjob);
-			}
-			var delcust = user.Customers.First(c => c.Id == cust.Id);
-			Log($"DisconnectUserChildJob | User {user.Id} {user.Name} DEL Cust {delcust.Id} {delcust.Name}");
+			Log($"ReplaceUserChildJobs | User {user.Id} {user.Name} ADD Job {job.Id} {job.Name}");
+			user.Jobs.Add(job);
+		}
+		// Any User ⮞ Customer where it's the parent of one of the jobs is redundant and must be removed.
+		int[] jobcustids = jobquery.Where(j => j.CustomerId != null).Select(j => (int)j.CustomerId!).Distinct().ToArray();
+		int[] usercustids = user.Customers.Select(c => c.Id).ToArray();
+		int[] delids = usercustids.Intersect(jobcustids).ToArray();
+		var delcusts = context.Customers.AsNoTracking().Where(c => delids.Contains(c.Id)).ToArray();
+		foreach (var delcust in delcusts)
+		{
+			Log($"ReplaceUserChildJobs | User {user.Id} {user.Name} DEL Cust {delcust.Id} {delcust.Name}");
 			user.Customers.Remove(delcust);
 		}
-		else
+		await context.SaveChangesAsync().ConfigureAwait(false);
+		return await RereadUser(context, uid).ConfigureAwait(false);
+	}
+
+	public async Task<Shared.Entities.User?> DisconnectUserChildRealm(string userId, string realmId)
+	{
+		Log($"DisconnectUserChildRealm({userId},{realmId})");
+		int uid = int.Parse(userId);
+		using var context = MakeContext();
+		var user = await context.Users
+			.Include(c => c.Realms)
+			.FirstOrDefaultAsync(u => u.Id == uid);
+		if (user == null) return null;
+		int rid = int.Parse(realmId);
+		if (user.Realms.Any(r => r.Id == rid))
 		{
-			// The User is not connected to the Job's parent Customer.
-			// It can only have a set of Job connections (maybe empty).
-			var deljob = user.Jobs.FirstOrDefault(j => j.Id == jid);
-			if (deljob != null)
+			Realm? realm = await context.Realms.AsNoTracking().FirstOrDefaultAsync(r => r.Id == rid).ConfigureAwait(false);
+			if (realm != null)
 			{
-				Log($"DisconnectUserChildJob | User {user.Id} {user.Name} ADD Job {deljob.Id} {deljob.Name}");
-				user.Jobs.Remove(deljob);
+				Log($"DisconnectUserChildRealm | User {user.Id} {user.Name} DEL Realm {realm.Id} {realm.Name}");
+				user.Realms.Remove(realm);
+				await context.SaveChangesAsync().ConfigureAwait(false);
 			}
 		}
+		return await RereadUser(context, uid).ConfigureAwait(false);
+	}
 
+	public async Task<Shared.Entities.User?> ConnectUserChildRealms(string userId, string[] realmIds)
+	{
+		Log($"ConnectUserChildRealms({userId},{Join(realmIds)})");
+		int uid = int.Parse(userId);
+		using var context = MakeContext();
+		var user = await context.Users
+			.Include(c => c.Realms)
+			.FirstOrDefaultAsync(u => u.Id == uid);
+		if (user == null) return null;
+		int[] rids = realmIds.Select(x => int.Parse(x)).ToArray();
+		int[] userrids = user.Realms.Select(r => r.Id).ToArray();
+		int[] addrids = rids.Except(userrids).ToArray();
+		Realm[] addrealms = await context.Realms.AsNoTracking().Where(r => addrids.Contains(r.Id)).ToArrayAsync().ConfigureAwait(false);
+
+		foreach (var addrealm in addrealms)
+		{
+			Log($"ConnectUserChildRealms | User {user.Id} {user.Name} ADD Realm {addrealm.Id} {addrealm.Name}");
+			user.Realms.Add(addrealm);
+		}
 		await context.SaveChangesAsync().ConfigureAwait(false);
-		return await RereadUser(context, uid);
+		return await RereadUser(context, uid).ConfigureAwait(false);
+	}
+
+	public async Task<Shared.Entities.User?> ReplaceUserChildRealms(string userId, string[] realmIds)
+	{
+		Log($"ReplaceUserChildRealms({userId},{Join(realmIds)})");
+		int uid = int.Parse(userId);
+		using var context = MakeContext();
+		var user = await context.Users
+			.Include(c => c.Realms)
+			.FirstOrDefaultAsync(u => u.Id == uid);
+		if (user == null) return null;
+		int[] rids = realmIds.Select(x => int.Parse(x)).ToArray();
+		Realm[] addrealms = await context.Realms.AsNoTracking().Where(r => rids.Contains(r.Id)).ToArrayAsync().ConfigureAwait(false);
+		user.Realms.Clear();
+		foreach (var addrealm in addrealms)
+		{
+			Log($"ReplaceUserChildRealms | User {user.Id} {user.Name} ADD Realm {addrealm.Id} {addrealm.Name}");
+			user.Realms.Add(addrealm);
+		}
+		await context.SaveChangesAsync().ConfigureAwait(false);
+		return await RereadUser(context, uid).ConfigureAwait(false);
 	}
 
 	static async Task<Shared.Entities.User?> RereadUser(ExampleContext context, int userId)
 	{
-		var cust = await context.Users.AsNoTracking().Include(c => c.Customers).Include(c => c.Jobs).FirstOrDefaultAsync(u => u.Id == userId).ConfigureAwait(false);
+		var cust = await context.Users.AsNoTracking().Include(c => c.Customers).Include(c => c.Jobs).Include(c => c.Realms).FirstOrDefaultAsync(u => u.Id == userId).ConfigureAwait(false);
 		return ToUser(cust, true);
 	}
 

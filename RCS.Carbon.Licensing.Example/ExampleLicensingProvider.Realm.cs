@@ -86,6 +86,23 @@ partial class ExampleLicensingProvider
 		return await Task.FromResult(Array.Empty<string>());    // Not used
 	}
 
+	public async Task<Shared.Entities.Realm?> DisconnectRealmChildUser(string realmId, string userId)
+	{
+		int id = int.Parse(realmId);
+		using var context = MakeContext();
+		var realm = await context.Realms.Include(r => r.Users).FirstOrDefaultAsync(r => r.Id == id);
+		if (realm == null) return null;
+		int uid = int.Parse(userId);
+		var cust = realm.Users.FirstOrDefault(u => u.Id == uid);
+		if (cust != null)
+		{
+			realm.Users.Remove(cust);
+			await context.SaveChangesAsync();
+		}
+		await context.SaveChangesAsync().ConfigureAwait(false);
+		return await RereadRealm(context, id);
+	}
+
 	public async Task<Shared.Entities.Realm?> ConnectRealmChildUsers(string realmId, string[] userIds)
 	{
 		int id = int.Parse(realmId);
@@ -102,18 +119,34 @@ partial class ExampleLicensingProvider
 		return await RereadRealm(context, id).ConfigureAwait(false);
 	}
 
-	public async Task<Shared.Entities.Realm?> DisconnectRealmChildUser(string realmId, string userId)
+	public async Task<Shared.Entities.Realm?> ReplaceRealmChildUsers(string realmId, string[] userIds)
 	{
 		int id = int.Parse(realmId);
 		using var context = MakeContext();
-		var realm = await context.Realms.Include(r => r.Users).FirstOrDefaultAsync(r => r.Id == id);
+		var realm = await context.Realms.Include(r => r.Users).FirstOrDefaultAsync(r => r.Id == id).ConfigureAwait(false);
 		if (realm == null) return null;
-		int uid = int.Parse(userId);
-		var cust = realm.Users.FirstOrDefault(u => u.Id == uid);
+		int[] uids = userIds.Select(u => int.Parse(u)).ToArray();
+		var addusers = context.Users.Where(u => uids.Contains(u.Id)).ToArray();
+		realm.Users.Clear();
+		foreach (var adduser in addusers)
+		{
+			realm.Users.Add(adduser);
+		}
+		await context.SaveChangesAsync().ConfigureAwait(false);
+		return await RereadRealm(context, id).ConfigureAwait(false);
+	}
+
+	public async Task<Shared.Entities.Realm?> DisconnectRealmChildCustomer(string realmId, string customerId)
+	{
+		int id = int.Parse(realmId);
+		using var context = MakeContext();
+		var realm = await context.Realms.Include(r => r.Customers).FirstOrDefaultAsync(r => r.Id.ToString() == realmId).ConfigureAwait(false);
+		if (realm == null) return null;
+		int cid = int.Parse(customerId);
+		var cust = realm.Customers.FirstOrDefault(c => c.Id == cid);
 		if (cust != null)
 		{
-			realm.Users.Remove(cust);
-			await context.SaveChangesAsync();
+			realm.Customers.Remove(cust);
 		}
 		await context.SaveChangesAsync().ConfigureAwait(false);
 		return await RereadRealm(context, id);
@@ -135,17 +168,18 @@ partial class ExampleLicensingProvider
 		return await RereadRealm(context, id);
 	}
 
-	public async Task<Shared.Entities.Realm?> DisconnectRealmChildCustomer(string realmId, string customerId)
+	public async Task<Shared.Entities.Realm?> ReplaceRealmChildCustomers(string realmId, string[] customerIds)
 	{
 		int id = int.Parse(realmId);
 		using var context = MakeContext();
-		var realm = await context.Realms.Include(r => r.Customers).FirstOrDefaultAsync(r => r.Id.ToString() == realmId).ConfigureAwait(false);
+		var realm = await context.Realms.Include(r => r.Customers).FirstOrDefaultAsync(r => r.Id == id).ConfigureAwait(false);
 		if (realm == null) return null;
-		int cid = int.Parse(customerId);
-		var cust = realm.Customers.FirstOrDefault(c => c.Id == cid);
-		if (cust != null)
+		int[] cids = customerIds.Select(c => int.Parse(c)).ToArray();
+		var addcusts = context.Customers.Where(c => cids.Contains(c.Id)).ToArray();
+		realm.Customers.Clear();
+		foreach (var addcust in addcusts)
 		{
-			realm.Customers.Remove(cust);
+			realm.Customers.Add(addcust);
 		}
 		await context.SaveChangesAsync().ConfigureAwait(false);
 		return await RereadRealm(context, id);

@@ -24,7 +24,7 @@ Other unused interface members can be implemented like this:
   // etc
 ```
 
-The other interface members are only needed if the provider wishes to be a general-purpose licensing database management plug-in to the Midas Licensing Management Tool, which will be described in an upcoming Wiki page.
+The other interface members are only needed if the provider wishes to be a general-purpose licensing database management plug-in to the DNA Licensing Management Tool, which will be described in an upcoming Wiki page.
 
 ---
 

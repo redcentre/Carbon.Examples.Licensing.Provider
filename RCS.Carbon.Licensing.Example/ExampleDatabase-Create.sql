@@ -97,8 +97,8 @@ GO
 CREATE UNIQUE INDEX [IX_User_Name] ON [User] ([Name]);
 GO
 ------------------------------------------------------------------------------------------------
--- The following column was appended to support the Midas project with global RCS licensing
--- control over how many jobs a Midas login user can create.
+-- The following column was appended to support the DNA project with global RCS licensing
+-- control over how many jobs a DNA login user can create.
 ALTER TABLE [User] ADD [MaxJobs] INT NULL;
 ------------------------------------------------------------------------------------------------
 CREATE TABLE [dbo].[UserCustomer]
