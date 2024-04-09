@@ -50,6 +50,26 @@ partial class ExampleLicensingProvider
 			.ConfigureAwait(false);
 	}
 
+	public async Task<Shared.Entities.UserPick[]> ListUserPicksForRealms(params string[] realmIds)
+	{
+		var rids = realmIds.Select(x => int.Parse(x)).ToArray();
+		using var context = MakeContext();
+		return await context.Users
+			.AsNoTracking()
+			.Include(u => u.Realms)
+			.Where(u => u.Realms.Any(r => rids.Contains(r.Id)))
+			.AsAsyncEnumerable()
+			.Select(u => new Shared.Entities.UserPick(u.Id.ToString(), u.Name)
+			{
+				Email = u.Email,
+				IsInactive = u.IsDisabled,
+				Sunset = u.Sunset,
+				Roles = u.Roles?.Split(",; ".ToCharArray(), StringSplitOptions.RemoveEmptyEntries) ?? Array.Empty<string>()
+			})
+			.ToArrayAsync()
+			.ConfigureAwait(false);
+	}
+
 	public async Task<Shared.Entities.User> UpdateUser(Shared.Entities.User user)
 	{
 		using var context = MakeContext();

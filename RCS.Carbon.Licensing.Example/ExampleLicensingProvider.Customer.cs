@@ -59,6 +59,31 @@ partial class ExampleLicensingProvider
 			.ConfigureAwait(false);
 	}
 
+	public async Task<Shared.Entities.CustomerPick[]> ListCustomerPicksForRealms(params string[] realmIds)
+	{
+		var rids = realmIds.Select(x => int.Parse(x)).ToArray();
+		using var context = MakeContext();
+		return await context.Customers
+			.AsNoTracking()
+			.Include(c => c.Jobs)
+			.Include(c => c.Realms)
+			.Where(c => c.Realms.Any(r => rids.Contains(r.Id)))
+			.AsAsyncEnumerable()
+			.Select(c => new Shared.Entities.CustomerPick(c.Id.ToString(), c.Name)
+			{
+				IsInactive = c.Inactive,
+				DisplayName = c.DisplayName,
+				Jobs = c.Jobs.Select(j => new Shared.Entities.JobPick(j.Id.ToString(), j.Name)
+				{
+					DisplayName = j.DisplayName,
+					IsInactive = j.Inactive
+				}).ToArray()
+			})
+			.ToArrayAsync()
+			.ConfigureAwait(false);
+	}
+
+
 	public async Task<Shared.Entities.Customer> UpdateCustomer(Shared.Entities.Customer customer)
 	{
 		using var context = MakeContext();
