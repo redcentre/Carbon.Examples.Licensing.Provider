@@ -48,11 +48,11 @@ partial class ExampleLicensingProvider
 
 	public async Task<Shared.Entities.Customer[]> ListCustomers(params string[] realmIds)
 	{
-		var rids = realmIds.Select(x => int.Parse(x)).ToArray();
+		int[] rids = realmIds?.Select(x => int.Parse(x)).ToArray() ?? Array.Empty<int>();
 		using var context = MakeContext();
 		return await context.Customers
 			.AsNoTracking()
-			.Where(c => c.Realms.Any(r => rids.Contains(r.Id)))
+			.Where(c => rids.Length == 0 || c.Realms.Any(r => rids.Contains(r.Id)))
 			.AsAsyncEnumerable()
 			.Select(c => ToCustomer(c, false)!)
 			.ToArrayAsync()
@@ -61,13 +61,13 @@ partial class ExampleLicensingProvider
 
 	public async Task<Shared.Entities.CustomerPick[]> ListCustomerPicksForRealms(params string[] realmIds)
 	{
-		var rids = realmIds.Select(x => int.Parse(x)).ToArray();
+		int[] rids = realmIds?.Select(x => int.Parse(x)).ToArray() ?? Array.Empty<int>();
 		using var context = MakeContext();
 		return await context.Customers
 			.AsNoTracking()
 			.Include(c => c.Jobs)
 			.Include(c => c.Realms)
-			.Where(c => c.Realms.Any(r => rids.Contains(r.Id)))
+			.Where(c => rids.Length == 0 || c.Realms.Any(r => rids.Contains(r.Id)))
 			.AsAsyncEnumerable()
 			.Select(c => new Shared.Entities.CustomerPick(c.Id.ToString(), c.Name)
 			{
