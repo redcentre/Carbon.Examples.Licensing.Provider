@@ -41,7 +41,16 @@ public partial class ExampleLicensingProvider : ILicensingProvider
 		_connect = adoConnectionString ?? throw new ArgumentNullException(nameof(adoConnectionString));
 	}
 
-	public string Name => "Example Licensing Provider";
+	public string Name
+	{
+		get
+		{
+			var t = GetType();
+			var asm = t.Assembly;
+			var an = asm.GetName();
+			return asm.GetCustomAttribute<AssemblyTitleAttribute>()!.Title;
+		}
+	}
 
 	public string Description
 	{
@@ -50,9 +59,7 @@ public partial class ExampleLicensingProvider : ILicensingProvider
 			var t = GetType();
 			var asm = t.Assembly;
 			var an = asm.GetName();
-			string title = asm.GetCustomAttribute<AssemblyTitleAttribute>()!.Title;
-			var desc = asm.GetCustomAttribute<AssemblyDescriptionAttribute>()!.Description;
-			return $"{t.Name} {an.Version} - {desc}";
+			return asm.GetCustomAttribute<AssemblyDescriptionAttribute>()!.Description;
 		}
 	}
 
