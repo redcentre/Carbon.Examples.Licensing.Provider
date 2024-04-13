@@ -1,13 +1,14 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <Version>2.1.22</Version>
-    <InformationalVersion>2024-04-13 14:19 GMT+10</InformationalVersion>
+    <Version>2.1.23</Version>
+    <InformationalVersion>2024-04-13 18:16 GMT+10</InformationalVersion>
     <TargetFrameworks>net60</TargetFrameworks>
     <Authors>Red Centre Software</Authors>
     <Company>Red Centre Software</Company>
     <Product>Carbon</Product>
-    <Description>Example minimal licensing provider that uses a SQL Server database as backing storage.</Description>
+    <AssemblyTitle>Example Licensing Provider</AssemblyTitle>
+    <Description>Example ILicensingProvider implementing provider that uses a SQL Server database as backing storage.</Description>
     <Copyright>Copyright © 2020-2024 Red Centre Software</Copyright>
     <IsPackable>true</IsPackable>
     <PackageTags>redcentre;Red Centre Software;cross tabulation;crosstab</PackageTags>

@@ -50,6 +50,7 @@ public partial class ExampleLicensingProvider : ILicensingProvider
 			var t = GetType();
 			var asm = t.Assembly;
 			var an = asm.GetName();
+			string title = asm.GetCustomAttribute<AssemblyTitleAttribute>()!.Title;
 			var desc = asm.GetCustomAttribute<AssemblyDescriptionAttribute>()!.Description;
 			return $"{t.Name} {an.Version} - {desc}";
 		}
