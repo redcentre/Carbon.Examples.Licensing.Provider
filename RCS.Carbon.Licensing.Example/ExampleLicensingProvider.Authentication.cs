@@ -18,15 +18,15 @@ partial class ExampleLicensingProvider
 	{
 		using var context = MakeContext();
 		long id = GetId(userId);
-		var user = await context.Users.AsNoTracking()
+		var user = await context.Users
 			.Include(u => u.Customers).ThenInclude(c => c.Jobs)
 			.Include(u => u.Jobs).ThenInclude(j => j.Customer)
 			.Include(u => u.Realms)
 			.FirstOrDefaultAsync(u => u.Id == id) ?? throw new ExampleLicensingException(LicensingErrorType.IdentityNotFound, $"User Id '{userId}' does not exist");
-		if (user.Psw != null & user.Psw != password)
-		{
-			throw new ExampleLicensingException(LicensingErrorType.PasswordIncorrect, $"User Id '{userId}' incorrect password");
-		}
+		if (user.Psw != null & user.Psw != password) throw new ExampleLicensingException(LicensingErrorType.PasswordIncorrect, $"User Id '{userId}' incorrect password");
+		user.LoginCount = user.LoginCount == null ? 1 : user.LoginCount + 1;
+		user.LastLogin = DateTime.UtcNow;
+		await context.SaveChangesAsync().ConfigureAwait(false);
 		return await UserToFull(user);
 	}
 
@@ -34,37 +34,40 @@ partial class ExampleLicensingProvider
 	{
 		string upname = userName.ToUpper();
 		using var context = MakeContext();
-		var user = await context.Users.AsNoTracking()
+		var user = await context.Users
 			.Include(u => u.Customers).ThenInclude(c => c.Jobs)
 			.Include(u => u.Jobs).ThenInclude(j => j.Customer)
 			.Include(u => u.Realms)
 			.FirstOrDefaultAsync(u => u.Name.ToUpper() == upname) ?? throw new ExampleLicensingException(LicensingErrorType.IdentityNotFound, $"User Name '{userName}' does not exist");
-		if (user.Psw != null & user.Psw != password)
-		{
-			throw new ExampleLicensingException(LicensingErrorType.PasswordIncorrect, $"User Name '{userName}' incorrect password");
-		}
+		if (user.Psw != null & user.Psw != password) throw new ExampleLicensingException(LicensingErrorType.PasswordIncorrect, $"User Name '{userName}' incorrect password");
+		user.LoginCount = user.LoginCount == null ? 1 : user.LoginCount + 1;
+		user.LastLogin = DateTime.UtcNow;
+		await context.SaveChangesAsync().ConfigureAwait(false);
 		return await UserToFull(user);
 	}
 
 	public async Task<LicenceFull> GetFreeLicence(string? clientIdentifier = null, bool skipCache = false)
 	{
 		using var context = MakeContext();
-		var user = await context.Users.AsNoTracking()
+		var user = await context.Users
 			.Include(u => u.Customers).ThenInclude(c => c.Jobs)
 			.Include(u => u.Jobs).ThenInclude(j => j.Customer)
-			.FirstOrDefaultAsync(u => u.Name == GuestAccountName);
-		return user == null
-			? throw new ExampleLicensingException(LicensingErrorType.IdentityNotFound, $"Free or guest account with Name {GuestAccountName} does not exist")
-			: await UserToFull(user);
+			.FirstOrDefaultAsync(u => u.Name == GuestAccountName) ?? throw new ExampleLicensingException(LicensingErrorType.IdentityNotFound, $"Free or guest account with Name {GuestAccountName} does not exist");
+		user.LoginCount = user.LoginCount == null ? 1 : user.LoginCount + 1;
+		user.LastLogin = DateTime.UtcNow;
+		await context.SaveChangesAsync().ConfigureAwait(false);
+		return  await UserToFull(user);
 	}
 
 	public async Task<int> LogoutId(string userId)
 	{
+		// Reserved for future use
 		return await Task.FromResult(-1);
 	}
 
 	public async Task<int> ReturnId(string userId)
 	{
+		// Reserved for future use
 		return await Task.FromResult(-1);
 	}
 
@@ -73,10 +76,7 @@ partial class ExampleLicensingProvider
 		using var context = MakeContext();
 		long id = GetId(userId);
 		var user = context.Users.FirstOrDefault(u => u.Id == id) ?? throw new ExampleLicensingException(LicensingErrorType.IdentityNotFound, $"User Id '{userId}' does not exist");
-		if (user.Psw != null && user.Psw != oldPassword)
-		{
-			throw new ExampleLicensingException(LicensingErrorType.PasswordIncorrect, $"User Id '{userId}' incorrect old password");
-		}
+		if (user.Psw != null && user.Psw != oldPassword) throw new ExampleLicensingException(LicensingErrorType.PasswordIncorrect, $"User Id '{userId}' incorrect old password");
 		user.Psw = newPassword;
 		return await context.SaveChangesAsync().ConfigureAwait(false);
 	}
