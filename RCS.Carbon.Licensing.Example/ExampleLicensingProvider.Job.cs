@@ -31,6 +31,19 @@ partial class ExampleLicensingProvider
 		return ToJob(job, true);
 	}
 
+	public async Task<Shared.Entities.Job[]> ReadJobsByName(string jobName)
+	{
+		using var context = MakeContext();
+		return await context.Jobs.AsNoTracking()
+			.Include(j => j.Customer)
+			.Include(j => j.Users)
+			.Where(j => j.Name == jobName)
+			.AsAsyncEnumerable()
+			.Select(j => ToJob(j, true)!)
+			.ToArrayAsync()
+			.ConfigureAwait(false);
+	}
+
 	public async Task<Shared.Entities.Job[]> ListJobs()
 	{
 		using var context = MakeContext();
@@ -163,19 +176,12 @@ partial class ExampleLicensingProvider
 		Log($"DisconnectJobChildUser({jobId},{userId})");
 		int jid = int.Parse(jobId);
 		using var context = MakeContext();
-		var job = await context.Jobs
-			.Include(c => c.Users)
-			.FirstOrDefaultAsync(j => j.Id.ToString() == jobId);
+		var job = await context.Jobs.Include(c => c.Users).FirstOrDefaultAsync(j => j.Id.ToString() == jobId).ConfigureAwait(false);
 		if (job == null) return null;
 		int uid = int.Parse(userId);
-		var user = context.Users
-			.Include(u => u.Customers)
-			.Include(u => u.Jobs)
-			.FirstOrDefault(u => u.Id == uid);
+		var user = await context.Users.Include(u => u.Customers).Include(u => u.Jobs).FirstOrDefaultAsync(u => u.Id == uid).ConfigureAwait(false);
 		if (user == null) return null;
-		var cust = context.Customers
-			.Include(c => c.Jobs)
-			.First(c => c.Id == job.CustomerId);
+		var cust = await context.Customers.Include(c => c.Jobs).FirstAsync(c => c.Id == job.CustomerId).ConfigureAwait(false);
 		var usercust = user.Customers.FirstOrDefault(c => c.Id == cust.Id);
 		if (usercust != null)
 		{
@@ -220,18 +226,12 @@ partial class ExampleLicensingProvider
 		int jid = int.Parse(jobId);
 		int[] uids = userIds.Select(x => int.Parse(x)).ToArray();
 		using var context = MakeContext();
-		var job = await context.Jobs
-			.FirstOrDefaultAsync(j => j.Id == jid);
+		var job = await context.Jobs.FirstOrDefaultAsync(j => j.Id == jid).ConfigureAwait(false);
 		if (job == null) return null;
-		var cust = context.Customers
-			.Include(c => c.Jobs)
-			.First(c => c.Id == job.CustomerId);
+		var cust = await context.Customers.Include(c => c.Jobs).FirstAsync(c => c.Id == job.CustomerId).ConfigureAwait(false);
 		Debug.Assert(cust != null);
 		int[] allCustJids = cust.Jobs.Select(j => j.Id).ToArray();
-		var userquery = context.Users
-			.Include(u => u.Customers)
-			.Include(u => u.Jobs)
-			.Where(u => uids.Contains(u.Id));
+		var userquery = await context.Users.Include(u => u.Customers).Include(u => u.Jobs).Where(u => uids.Contains(u.Id)).ToArrayAsync().ConfigureAwait(false);
 		foreach (var user in userquery)
 		{
 			int[] newUserJobIds = user.Jobs.Select(j => j.Id).Concat(new int[] { jid }).Distinct().ToArray();
@@ -286,9 +286,7 @@ partial class ExampleLicensingProvider
 	{
 		using var context = MakeContext();
 		int jid = int.Parse(jobId);
-		var job = context.Jobs
-			.Include(j => j.Customer)
-			.FirstOrDefault(j => j.Id == jid);
+		var job = await context.Jobs.Include(j => j.Customer).FirstOrDefaultAsync(j => j.Id == jid).ConfigureAwait(false);
 		if (job?.Customer?.StorageKey == null) return null;
 		var cc = new BlobContainerClient(job.Customer.StorageKey, job.Name);
 		if (!await cc.ExistsAsync()) return null;

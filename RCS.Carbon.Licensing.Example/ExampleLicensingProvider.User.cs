@@ -26,6 +26,20 @@ partial class ExampleLicensingProvider
 		return ToUser(user, true);
 	}
 
+	public async Task<Shared.Entities.User[]> ReadUsersByName(string userName)
+	{
+		using var context = MakeContext();
+		return await context.Users.AsNoTracking()
+			.Include(u => u.Realms)
+			.Include(u => u.Customers)
+			.Include(u => u.Jobs)
+			.Where(u => u.Name == userName)
+			.AsAsyncEnumerable()
+			.Select(u => ToUser(u, true)!)
+			.ToArrayAsync()
+			.ConfigureAwait(false);
+	}
+
 	public async Task<Shared.Entities.User[]> ListUsers()
 	{
 		using var context = MakeContext();
@@ -198,17 +212,10 @@ partial class ExampleLicensingProvider
 		Log($"ConnectUserChildCustomers({userId},{Join(customerIds)})");
 		int uid = int.Parse(userId);
 		using var context = MakeContext();
-		var user = await context.Users
-			.Include(u => u.Customers)
-			.Include(u => u.Jobs)
-			.FirstOrDefaultAsync(u => u.Id == uid)
-			.ConfigureAwait(false);
+		var user = await context.Users.Include(u => u.Customers).Include(u => u.Jobs).FirstOrDefaultAsync(u => u.Id == uid).ConfigureAwait(false);
 		if (user == null) return null;
 		int[] cids = customerIds.Select(x => int.Parse(x)).ToArray();
-		var custquery = context.Customers
-			.Include(c => c.Users)
-			.Include(c => c.Jobs)
-			.Where(c => cids.Contains(c.Id));
+		Customer[] custquery = await context.Customers.Include(c => c.Users).Include(c => c.Jobs).Where(c => cids.Contains(c.Id)).ToArrayAsync().ConfigureAwait(false);
 		foreach (var cust in custquery)
 		{
 			if (!cust.Users.Any(cu => cu.Id == uid))
@@ -233,17 +240,10 @@ partial class ExampleLicensingProvider
 		Log($"ReplaceUserChildCustomers({userId},{Join(customerIds)})");
 		int uid = int.Parse(userId);
 		using var context = MakeContext();
-		var user = await context.Users
-			.Include(u => u.Customers)
-			.Include(u => u.Jobs)
-			.FirstOrDefaultAsync(u => u.Id == uid)
-			.ConfigureAwait(false);
+		var user = await context.Users.Include(u => u.Customers).Include(u => u.Jobs).FirstOrDefaultAsync(u => u.Id == uid).ConfigureAwait(false);
 		if (user == null) return null;
 		int[] cids = customerIds.Select(x => int.Parse(x)).ToArray();
-		var custquery = context.Customers
-			.Include(c => c.Users)
-			.Include(c => c.Jobs)
-			.Where(c => cids.Contains(c.Id));
+		Customer[] custquery = await context.Customers.Include(c => c.Users).Include(c => c.Jobs).Where(c => cids.Contains(c.Id)).ToArrayAsync().ConfigureAwait(false);
 		// Replace all User ⮞ Customers
 		user.Customers.Clear();
 		foreach (var cust in custquery)
@@ -255,7 +255,7 @@ partial class ExampleLicensingProvider
 		int[] custjobids = custquery.SelectMany(c => c.Jobs.Select(j => j.Id)).Distinct().ToArray();
 		int[] userjobids = user.Jobs.Select(j => j.Id).ToArray();
 		int[] deljobids = userjobids.Intersect(custjobids).ToArray();
-		var deljobs = await context.Jobs.AsNoTracking().Where(j => deljobids.Contains(j.Id)).ToArrayAsync().ConfigureAwait(false);
+		var deljobs = await context.Jobs.Where(j => deljobids.Contains(j.Id)).ToArrayAsync().ConfigureAwait(false);
 		foreach (var deljob in deljobs)
 		{
 			Log($"ReplaceUserChildCustomers | User {user.Id} {user.Name} DEL Job {deljob.Id} {deljob.Name}");
@@ -284,11 +284,9 @@ partial class ExampleLicensingProvider
 			.FirstOrDefaultAsync(u => u.Id == uid);
 		if (user == null) return null;
 		int jid = int.Parse(jobId);
-		var job = context.Jobs.First(j => j.Id == jid);
+		var job = await context.Jobs.FirstAsync(j => j.Id == jid).ConfigureAwait(false);
 		if (job == null) return null;
-		var cust = context.Customers
-			.Include(c => c.Jobs)
-			.First(c => c.Id == job.CustomerId);
+		var cust = await context.Customers.Include(c => c.Jobs).FirstAsync(c => c.Id == job.CustomerId).ConfigureAwait(false);
 		if (user.Customers.Any(uc => uc.Id == cust.Id))
 		{
 			// The User is connected to the Job's parent Customer.
@@ -331,24 +329,14 @@ partial class ExampleLicensingProvider
 		Log($"ConnectUserChildJobs({userId},{Join(jobIds)})");
 		int uid = int.Parse(userId);
 		using var context = MakeContext();
-		var user = await context.Users
-			.Include(u => u.Customers)
-			.Include(u => u.Jobs)
-			.FirstOrDefaultAsync(u => u.Id == uid)
-			.ConfigureAwait(false);
+		var user = await context.Users.Include(u => u.Customers).Include(u => u.Jobs).FirstOrDefaultAsync(u => u.Id == uid).ConfigureAwait(false);
 		if (user == null) return null;
 		int[] jids = jobIds.Select(j => int.Parse(j)).ToArray();
-		var jobquery = context.Jobs
-			.Include(j => j.Users)
-			.Include(j => j.Customer)
-			.Where(j => jids.Contains(j.Id))
-			.ToArray();
+		var jobquery = await context.Jobs.Include(j => j.Users).Include(j => j.Customer).Where(j => jids.Contains(j.Id)).ToArrayAsync().ConfigureAwait(false);
 		foreach (var job in jobquery)
 		{
 			int[] newUserJids = user.Jobs.Select(uj => uj.Id).Concat(new int[] { job.Id }).Distinct().ToArray();
-			var cust = context.Customers
-				.Include(c => c.Jobs)
-				.First(c => c.Id == job.CustomerId);
+			var cust = await context.Customers.Include(c => c.Jobs).FirstAsync(c => c.Id == job.CustomerId).ConfigureAwait(false);
 			int[] custjids = cust.Jobs.Select(cj => cj.Id).ToArray();
 			// If the new user job ids contains all the customer's child job ids? (TRICKY)
 			if (custjids.Intersect(newUserJids).Count() == custjids.Length)
@@ -389,18 +377,10 @@ partial class ExampleLicensingProvider
 		Log($"ReplaceUserChildJobs({userId},{Join(jobIds)})");
 		int uid = int.Parse(userId);
 		using var context = MakeContext();
-		var user = await context.Users
-			.Include(u => u.Customers)
-			.Include(u => u.Jobs)
-			.FirstOrDefaultAsync(u => u.Id == uid)
-			.ConfigureAwait(false);
+		var user = await context.Users.Include(u => u.Customers).Include(u => u.Jobs).FirstOrDefaultAsync(u => u.Id == uid).ConfigureAwait(false);
 		if (user == null) return null;
 		int[] jids = jobIds.Select(j => int.Parse(j)).ToArray();
-		var jobquery = context.Jobs
-			.Include(j => j.Users)
-			.Include(j => j.Customer)
-			.Where(j => jids.Contains(j.Id))
-			.ToArray();
+		var jobquery = await context.Jobs.Include(j => j.Users).Include(j => j.Customer).Where(j => jids.Contains(j.Id)).ToArrayAsync().ConfigureAwait(false);
 		// Replace all User ⮞ Job joins
 		user.Jobs.Clear();
 		foreach (var job in jobquery)
@@ -412,7 +392,7 @@ partial class ExampleLicensingProvider
 		int[] jobcustids = jobquery.Where(j => j.CustomerId != null).Select(j => (int)j.CustomerId!).Distinct().ToArray();
 		int[] usercustids = user.Customers.Select(c => c.Id).ToArray();
 		int[] delids = usercustids.Intersect(jobcustids).ToArray();
-		var delcusts = context.Customers.AsNoTracking().Where(c => delids.Contains(c.Id)).ToArray();
+		var delcusts = await context.Customers.Where(c => delids.Contains(c.Id)).ToArrayAsync().ConfigureAwait(false);
 		foreach (var delcust in delcusts)
 		{
 			Log($"ReplaceUserChildJobs | User {user.Id} {user.Name} DEL Cust {delcust.Id} {delcust.Name}");
@@ -427,14 +407,12 @@ partial class ExampleLicensingProvider
 		Log($"DisconnectUserChildRealm({userId},{realmId})");
 		int uid = int.Parse(userId);
 		using var context = MakeContext();
-		var user = await context.Users
-			.Include(c => c.Realms)
-			.FirstOrDefaultAsync(u => u.Id == uid);
+		var user = await context.Users.Include(c => c.Realms).FirstOrDefaultAsync(u => u.Id == uid).ConfigureAwait(false);
 		if (user == null) return null;
 		int rid = int.Parse(realmId);
 		if (user.Realms.Any(r => r.Id == rid))
 		{
-			Realm? realm = await context.Realms.AsNoTracking().FirstOrDefaultAsync(r => r.Id == rid).ConfigureAwait(false);
+			Realm? realm = await context.Realms.FirstOrDefaultAsync(r => r.Id == rid).ConfigureAwait(false);
 			if (realm != null)
 			{
 				Log($"DisconnectUserChildRealm | User {user.Id} {user.Name} DEL Realm {realm.Id} {realm.Name}");
@@ -450,15 +428,12 @@ partial class ExampleLicensingProvider
 		Log($"ConnectUserChildRealms({userId},{Join(realmIds)})");
 		int uid = int.Parse(userId);
 		using var context = MakeContext();
-		var user = await context.Users
-			.Include(c => c.Realms)
-			.FirstOrDefaultAsync(u => u.Id == uid);
+		var user = await context.Users.Include(c => c.Realms).FirstOrDefaultAsync(u => u.Id == uid).ConfigureAwait(false);
 		if (user == null) return null;
 		int[] rids = realmIds.Select(x => int.Parse(x)).ToArray();
-		int[] userrids = user.Realms.Select(r => r.Id).ToArray();
-		int[] addrids = rids.Except(userrids).ToArray();
-		Realm[] addrealms = await context.Realms.AsNoTracking().Where(r => addrids.Contains(r.Id)).ToArrayAsync().ConfigureAwait(false);
-
+		int[] gotrids = user.Realms.Select(r => r.Id).ToArray();
+		int[] addrids = rids.Except(gotrids).ToArray();
+		Realm[] addrealms = await context.Realms.Where(r => addrids.Contains(r.Id)).ToArrayAsync().ConfigureAwait(false);
 		foreach (var addrealm in addrealms)
 		{
 			Log($"ConnectUserChildRealms | User {user.Id} {user.Name} ADD Realm {addrealm.Id} {addrealm.Name}");
@@ -473,12 +448,10 @@ partial class ExampleLicensingProvider
 		Log($"ReplaceUserChildRealms({userId},{Join(realmIds)})");
 		int uid = int.Parse(userId);
 		using var context = MakeContext();
-		var user = await context.Users
-			.Include(c => c.Realms)
-			.FirstOrDefaultAsync(u => u.Id == uid);
+		var user = await context.Users.Include(c => c.Realms).FirstOrDefaultAsync(u => u.Id == uid).ConfigureAwait(false);
 		if (user == null) return null;
 		int[] rids = realmIds.Select(x => int.Parse(x)).ToArray();
-		Realm[] addrealms = await context.Realms.AsNoTracking().Where(r => rids.Contains(r.Id)).ToArrayAsync().ConfigureAwait(false);
+		Realm[] addrealms = await context.Realms.Where(r => rids.Contains(r.Id)).ToArrayAsync().ConfigureAwait(false);
 		user.Realms.Clear();
 		foreach (var addrealm in addrealms)
 		{

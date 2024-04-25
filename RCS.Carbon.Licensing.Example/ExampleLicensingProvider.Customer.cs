@@ -29,8 +29,11 @@ partial class ExampleLicensingProvider
 	{
 		using var context = MakeContext();
 		return await context.Customers.AsNoTracking()
-			.AsAsyncEnumerable()
+			.Include(c => c.Users)
+			.Include(c => c.Jobs)
+			.Include(c => c.Realms)
 			.Where(c => c.Name == customerName)
+			.AsAsyncEnumerable()
 			.Select(c => ToCustomer(c, true)!)
 			.ToArrayAsync()
 			.ConfigureAwait(false);
@@ -154,12 +157,7 @@ partial class ExampleLicensingProvider
 	public async Task<int> DeleteCustomer(string id)
 	{
 		using var context = MakeContext();
-		var cust = await context.Customers
-			.Include(c => c.Jobs)
-			.Include(c => c.Users)
-			.Include(c => c.Realms)
-			.FirstOrDefaultAsync(c => c.Id == int.Parse(id))
-			.ConfigureAwait(false);
+		var cust = await context.Customers.Include(c => c.Jobs).Include(c => c.Users).Include(c => c.Realms).FirstOrDefaultAsync(c => c.Id == int.Parse(id)).ConfigureAwait(false);
 		if (cust == null) return 0;
 		foreach (var job in cust.Jobs.ToArray())
 		{
@@ -197,9 +195,7 @@ partial class ExampleLicensingProvider
 		Log($"DisconnectCustomerChildUser({customerId},{userId})");
 		int id = int.Parse(customerId);
 		using var context = MakeContext();
-		var cust = await context.Customers
-			.Include(c => c.Users)
-			.FirstOrDefaultAsync(c => c.Id == id);
+		var cust = await context.Customers.Include(c => c.Users).FirstOrDefaultAsync(c => c.Id == id);
 		if (cust == null) return null;
 		var user = cust.Users.FirstOrDefault(j => j.Id.ToString() == userId);
 		if (user != null)
@@ -223,17 +219,11 @@ partial class ExampleLicensingProvider
 		Log($"ConnectCustomerChildUsers({customerId},{Join(userIds)})");
 		int cid = int.Parse(customerId);
 		using var context = MakeContext();
-		var cust = await context.Customers
-			.Include(c => c.Users)
-			.Include(c => c.Jobs)
-			.FirstOrDefaultAsync(c => c.Id == cid);
+		var cust = await context.Customers.Include(c => c.Users).Include(c => c.Jobs).FirstOrDefaultAsync(c => c.Id == cid);
 		if (cust == null) return null;
 		int[] custjids = cust.Jobs.Select(j => j.Id).ToArray();
 		int[] uids = userIds.Select(x => int.Parse(x)).ToArray();
-		var userquery = context.Users
-			.Include(u => u.Customers)
-			.Include(u => u.Jobs)
-			.Where(u => uids.Contains(u.Id));
+		var userquery = await context.Users.Include(u => u.Customers).Include(u => u.Jobs).Where(u => uids.Contains(u.Id)).ToArrayAsync().ConfigureAwait(false);
 		foreach (var user in userquery)
 		{
 			// Add the User ⮞ Customer if not already present.
@@ -259,17 +249,11 @@ partial class ExampleLicensingProvider
 		Log($"ReplaceCustomerChildUsers({customerId},{Join(userIds)})");
 		int cid = int.Parse(customerId);
 		using var context = MakeContext();
-		var cust = await context.Customers
-			.Include(c => c.Users)
-			.Include(c => c.Jobs)
-			.FirstOrDefaultAsync(c => c.Id == cid);
+		var cust = await context.Customers.Include(c => c.Users).Include(c => c.Jobs).FirstOrDefaultAsync(c => c.Id == cid);
 		if (cust == null) return null;
 		int[] custjids = cust.Jobs.Select(j => j.Id).ToArray();
 		int[] uids = userIds.Select(x => int.Parse(x)).ToArray();
-		var userquery = context.Users
-			.Include(u => u.Customers)
-			.Include(u => u.Jobs)
-			.Where(u => uids.Contains(u.Id));
+		var userquery = await context.Users.Include(u => u.Customers).Include(u => u.Jobs).Where(u => uids.Contains(u.Id)).ToArrayAsync().ConfigureAwait(false);
 		foreach (var user in userquery)
 		{
 			// Set a single User ⮞ Customer.

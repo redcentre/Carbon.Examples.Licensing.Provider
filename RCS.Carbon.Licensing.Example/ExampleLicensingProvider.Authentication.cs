@@ -75,7 +75,7 @@ partial class ExampleLicensingProvider
 	{
 		using var context = MakeContext();
 		long id = GetId(userId);
-		var user = context.Users.FirstOrDefault(u => u.Id == id) ?? throw new ExampleLicensingException(LicensingErrorType.IdentityNotFound, $"User Id '{userId}' does not exist");
+		var user = await context.Users.FirstOrDefaultAsync(u => u.Id == id).ConfigureAwait(false) ?? throw new ExampleLicensingException(LicensingErrorType.IdentityNotFound, $"User Id '{userId}' does not exist");
 		if (user.Psw != null && user.Psw != oldPassword) throw new ExampleLicensingException(LicensingErrorType.PasswordIncorrect, $"User Id '{userId}' incorrect old password");
 		user.Psw = newPassword;
 		return await context.SaveChangesAsync().ConfigureAwait(false);
@@ -92,7 +92,7 @@ partial class ExampleLicensingProvider
 	{
 		using var context = MakeContext();
 		long id = GetId(userId);
-		var user = context.Users.FirstOrDefault(u => u.Id == id) ?? throw new ExampleLicensingException(LicensingErrorType.IdentityNotFound, $"User Id '{userId}' does not exist");
+		var user = await context.Users.FirstOrDefaultAsync(u => u.Id == id).ConfigureAwait(false) ?? throw new ExampleLicensingException(LicensingErrorType.IdentityNotFound, $"User Id '{userId}' does not exist");
 		user.Name = userName;
 		user.Comment = comment;
 		user.Email = email;

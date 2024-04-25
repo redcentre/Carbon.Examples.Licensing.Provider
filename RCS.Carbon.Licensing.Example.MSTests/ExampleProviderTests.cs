@@ -4,6 +4,7 @@ using System.Threading.Tasks;
 using Microsoft.Extensions.Configuration;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using RCS.Carbon.Licensing.Shared;
+using RCS.Carbon.Licensing.Shared.Entities;
 using RCS.Carbon.Shared;
 using RCS.Carbon.Tables;
 
@@ -96,6 +97,64 @@ public class ExampleProviderTests : TestBase
 				Info($"|  |  JOB {job.Id} | {job.Name} | {job.DisplayName} • {vtrs} • {reals}");
 			}
 		}
+		int count = await prov.ReturnId(licfull.Id);
+		Info($"Return count -> {count}");
+	}
+
+	[TestMethod]
+	public async Task T400_Connect_Story()
+	{
+		var prov = MakeProvider();
+		LicenceFull? licfull = await prov.LoginName("gfkeogh@gmail.com", "qwe123");
+		Info($"LoginName -> {licfull.Id} | {licfull.Name}");
+
+		const string Realm1Name = "TempTestRealm1";
+		const string User1Name = "temp1@testing.com.au";
+		const string User2Name = "temp2@testing.com.au";
+
+		async Task<string> EnsureRealm(string realmName)
+		{
+			var realms = await prov.ReadRealmsByName(realmName);
+			Assert.IsTrue(realms.Length <= 1);
+			if (realms.Length == 0)
+			{
+				var realm = new Realm() { Name = realmName };
+				var realm2 = await prov.UpdateRealm(realm);
+				Info($"Created realm {realm2.Id} {realm2.Name}");
+				return realm2.Id;
+			}
+			else
+			{
+				Info($"Realm {realms[0].Id} {realms[0].Name} already exists");
+				return realms[0].Id;
+			}
+		}
+		string rid1 = await EnsureRealm(Realm1Name);
+
+		async Task<string> EnsureUser(string userName)
+		{
+			var users = await prov.ReadUsersByName(userName);
+			Assert.IsTrue(users.Length <= 1);
+			if (users.Length == 0)
+			{
+				var user = new User() { Name = userName, Roles = new string[] { "Analyst", "Silver" }, Comment = "TESTING ONLY", Psw = "test123" };
+				var user2 = await prov.UpdateUser(user);
+				Info($"Created user {user2.Id} {user2.Name}");
+				return user2.Id;
+			}
+			else
+			{
+				Info($"User {users[0].Id} {users[0].Name} already exists");
+				return users[0].Id;
+			}
+		}
+		string uid1 = await EnsureUser(User1Name);
+		string uid2 = await EnsureUser(User2Name);
+
+		await prov.ConnectUserChildRealms(uid1, new string[] { rid1 });
+		//await prov.ReplaceUserChildRealms(uid1, new string[] { rid1 });
+		//await prov.ConnectRealmChildUsers(rid1, new string[] { uid1 });
+
 		int count = await prov.ReturnId(licfull.Id);
 		Info($"Return count -> {count}");
 	}
