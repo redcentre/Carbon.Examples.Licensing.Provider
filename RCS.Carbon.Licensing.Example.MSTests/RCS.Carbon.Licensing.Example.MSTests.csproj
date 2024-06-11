@@ -17,10 +17,10 @@
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
-    <PackageReference Include="RCS.Carbon.Tables" Version="8.9.21" />
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\..\..\Carbon\Carbon\RCS.Carbon.Tables\RCS.Carbon.Tables.csproj" />
     <ProjectReference Include="..\RCS.Carbon.Licensing.Example\RCS.Carbon.Licensing.Example.csproj" />
   </ItemGroup>
 
