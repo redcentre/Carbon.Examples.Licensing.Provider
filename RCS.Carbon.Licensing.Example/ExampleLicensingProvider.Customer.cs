@@ -108,21 +108,22 @@ partial class ExampleLicensingProvider
 		}
 		row.Name = customer.Name;
 		row.DisplayName = customer.DisplayName;
+		row.Psw = customer.Psw;
 		row.StorageKey = customer.StorageKey;
-		row.Comment = customer.Comment;
 		row.CloudCustomerNames = customer.CloudCustomerNames?.Length > 0 ? string.Join(" ", customer.CloudCustomerNames) : null;
-		row.Corporation = customer.Corporation;
-		row.Sunset = customer.Sunset;
-		row.Sequence = customer.Sequence;
-		row.Credits = customer.Credits;
 		row.DataLocation = (int?)customer.DataLocation;
-		row.Inactive = customer.Inactive;
+		row.Sequence = customer.Sequence;
+		row.Corporation = customer.Corporation;
+		row.Comment = customer.Comment;
 		row.Info = customer.Info;
 		row.Logo = customer.Logo;
-		row.Psw = customer.Psw;
 		row.SignInLogo = customer.SignInLogo;
 		row.SignInNote = customer.SignInNote;
+		row.Credits = customer.Credits;
 		row.Spent = customer.Spent;
+		row.Sunset = customer.Sunset;
+		row.MaxJobs = customer.MaxJobs;
+		row.Inactive = customer.Inactive;
 		await context.SaveChangesAsync().ConfigureAwait(false);
 		return await RereadCustomer(context, row.Id).ConfigureAwait(false);
 	}

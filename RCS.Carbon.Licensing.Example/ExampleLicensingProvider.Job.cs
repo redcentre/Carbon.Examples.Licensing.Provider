@@ -97,6 +97,7 @@ partial class ExampleLicensingProvider
 		row.CustomerId = job.CustomerId?.Length > 0 ? int.Parse(job.CustomerId) : null;
 		row.Description = job.Description;
 		row.Sequence = job.Sequence;
+		row.DataLocation = (int?)job.DataLocation;
 		row.Cases = job.Cases;
 		row.LastUpdate = job.LastUpdate;
 		row.Info = job.Info;
@@ -313,6 +314,7 @@ partial class ExampleLicensingProvider
 		return list.ToArray();
 
 	}
+
 	public async Task<XElement> CompareJobsAndContainers()
 	{
 		var elem = new XElement("Comparison");

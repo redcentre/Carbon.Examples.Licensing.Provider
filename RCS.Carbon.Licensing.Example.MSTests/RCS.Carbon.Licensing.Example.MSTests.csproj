@@ -20,7 +20,6 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\..\Carbon\Carbon\RCS.Carbon.Tables\RCS.Carbon.Tables.csproj" />
     <ProjectReference Include="..\RCS.Carbon.Licensing.Example\RCS.Carbon.Licensing.Example.csproj" />
   </ItemGroup>
 
