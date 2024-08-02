@@ -1,9 +1,9 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <Version>3.0.0</Version>
+    <Version>3.0.1</Version>
     <InformationalVersion>2024-08-03 09:41 GMT+10</InformationalVersion>
-    <TargetFrameworks>net60</TargetFrameworks>
+    <TargetFrameworks>net6.0;net8.0</TargetFrameworks>
     <Authors>Red Centre Software</Authors>
     <Company>Red Centre Software</Company>
     <Product>Carbon</Product>
