@@ -1,8 +1,8 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <Version>3.0.3</Version>
-    <InformationalVersion>2024-08-16 13:28 GMT+10</InformationalVersion>
+    <Version>3.0.4</Version>
+    <InformationalVersion>2024-08-23 12:16 GMT+10</InformationalVersion>
     <TargetFrameworks>net6.0;net8.0</TargetFrameworks>
     <Authors>Red Centre Software</Authors>
     <Company>Red Centre Software</Company>
@@ -35,7 +35,7 @@
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
-    <PackageReference Include="RCS.Carbon.Licensing.Shared" Version="9.0.2" />
+    <PackageReference Include="RCS.Carbon.Licensing.Shared" Version="9.0.3" />
     <PackageReference Include="System.Linq.Async" Version="6.0.1" />
   </ItemGroup>
 
