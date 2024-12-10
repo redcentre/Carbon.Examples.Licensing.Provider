@@ -54,6 +54,21 @@ partial class ExampleLicensingProvider
 			.ConfigureAwait(false);
 	}
 
+	/// <summary>
+	/// The example licensing provider which is based upon a SQL Server database does not currently
+	/// support flagging which jobs (surveys) are available for TSAPI export. An empty set of string
+	/// lines is currently returned.
+	/// </summary>
+	/// <remarks>
+	/// This method can be revisited in the future when TSAPI exports are required, and a suitable
+	/// job tagging convention can be invented.
+	/// </remarks>
+	public async Task<string[]> ListTSAPIVisibleJobs()
+	{
+		var empty = Array.Empty<string>();
+		return await Task.FromResult(empty);
+	}
+
 	public async Task<Shared.Entities.Job> UpdateJob(Shared.Entities.Job job)
 	{
 		using var context = MakeContext();
