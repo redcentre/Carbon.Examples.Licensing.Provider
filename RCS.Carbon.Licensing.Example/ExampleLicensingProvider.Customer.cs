@@ -86,24 +86,49 @@ partial class ExampleLicensingProvider
 			.ConfigureAwait(false);
 	}
 
-
+	/// <summary>
+	/// Updates or inserts a customer. See the remarks for more detailed information.
+	/// </summary>
+	/// <remarks>
+	/// <para>
+	/// This method should have been called UpsertCustomer because it can insert or update a customer.
+	/// If the Id if the <paramref name="customer"/> parameter is <c>null</c> then a new customer will be created with a new unique Id and
+	/// default values for some other properties. If a customer with the Id exists then it will be updating with the incoming values.
+	/// An error is thrown if an attempt is made to update a customer that does not exist.
+	/// </para>
+	/// <para>
+	/// If the Subscription, Tenant, App and Secret Ids were specified when the provider was constructed, then creating a new customer
+	/// will also create an Azure Storage Account to be associated with the new customer. The connection string for the new account will
+	/// be stored in the <see cref="Shared.Entities.Customer.StorageKey"/> property of the new customer and returned.
+	/// </para>
+	/// </remarks>
+	/// <exception cref="ExampleLicensingException">Thrown if an attempt is made to update an existing customer Id that does not exist.</exception>
 	public async Task<Shared.Entities.Customer> UpdateCustomer(Shared.Entities.Customer customer)
 	{
 		using var context = MakeContext();
 		Customer row;
 		if (customer.Id == null)
 		{
-			// Inserting a new customer.
+			// Inserting a new customer. Generate a new unique Id.
+			int? newid = null;
+			while (newid == null)
+			{
+				int tryid = Random.Shared.Next(30_000_000, 40_000_000);
+				if (!await context.Customers.AnyAsync(c => c.Id == tryid).ConfigureAwait(false))
+				{
+					newid = tryid;
+				}
+			}
 			row = new Customer
 			{
-				Id = Random.Shared.Next(30_000_000, 40_000_000),
+				Id = newid.Value,
 				Created = DateTime.UtcNow
 			};
 			context.Customers.Add(row);
 		}
 		else
 		{
-			// This is an update of an existing customer.
+			// This is an update of an existing customer Id (which must exist).
 			row = await context.Customers.FirstOrDefaultAsync(c => c.Id.ToString() == customer.Id).ConfigureAwait(false) ?? throw new ExampleLicensingException(LicensingErrorType.CustomerNotFound, $"Customer Id {customer.Id} not found for update");
 		}
 		row.Name = customer.Name;

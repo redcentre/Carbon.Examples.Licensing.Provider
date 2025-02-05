@@ -1,7 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.ComponentModel;
-using System.ComponentModel.DataAnnotations;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
@@ -26,19 +25,33 @@ public partial class ExampleLicensingProvider : ILicensingProvider
 {
 	readonly string _prodkey;
 	readonly string _connect;
+	readonly string? _subscriptionId;
+	readonly string? _tenantId;
+	readonly string? _applicationId;
+	readonly string? _applicationSecret;
 
-	[Description("Example licensing provider using a SQL Server database")]
-	public ExampleLicensingProvider(
-		[Required]
-		[Description("Product key")]
-		string productKey,
-		[Required]
-		[Description("ADO database connection string")]
-		string adoConnectionString
-	)
+	/// <summary>
+	/// Constructs an example licensing service provider. Note that the four parameters <paramref name="subscriptionId"/>, <paramref name="tenantId"/>,
+	/// <paramref name="applicationId"/> and <paramref name="applicationSecret"/> are optional, but they must all be specified to allow the provider to
+	/// create, modify and delete Azure Storage Accounts which correspond to licensing customers.
+	/// See the notes on <see cref="UpdateCustomer(Shared.Entities.Customer)"/> for more information.
+	/// </summary>
+	/// <param name="productKey">The product key must be provided by Red Centre Software [support@redcentresoftware.com].</param>
+	/// <param name="adoConnectionString">ADO.NET connections string to the SQL server database containing the licensing information.</param>
+	/// <param name="subscriptionId">Optional Azure Subscription Id displayed in the Azure portal.</param>
+	/// <param name="tenantId">Optional Azure Tenant Id displayed in the Azure portal.</param>
+	/// <param name="applicationId">Optional Application Id that must be created in the Azure portal and assigned a role with sufficient
+	/// privileges to create, modify and delete Storage accounts (which correspond to licnsing cusgomers).</param>
+	/// <param name="applicationSecret">Optional Application Secret (aka 'password') created in the Azure portal and associated with the <paramref name="applicationId"/></param>
+	/// <exception cref="ArgumentNullException">Thrown if the <paramref name="productKey"/> or <paramref name="adoConnectionString"/> are null.</exception>
+	public ExampleLicensingProvider(string productKey, string adoConnectionString, string? subscriptionId = null, string? tenantId = null, string? applicationId = null, string? applicationSecret = null)
 	{
 		_prodkey = productKey ?? throw new ArgumentNullException(nameof(productKey));
 		_connect = adoConnectionString ?? throw new ArgumentNullException(nameof(adoConnectionString));
+		_subscriptionId = subscriptionId;
+		_tenantId = tenantId;
+		_applicationId = applicationId;
+		_applicationSecret = applicationSecret;
 	}
 
 	public string Name
@@ -75,11 +88,15 @@ public partial class ExampleLicensingProvider : ILicensingProvider
 		}
 	}
 
+	bool HasIds => _subscriptionId != null && _tenantId != null && _applicationId != null && _applicationSecret != null;
+
 	void Log(string message) => Trace.WriteLine($"\u25a0 {DateTime.Now:HH:mm:ss.fff} [{Environment.CurrentManagedThreadId}] {message}");
 
 	static string Join(params object[] values) => values == null ? "NULL" : "[" + string.Join(",", values) + "]";
 
 	ExampleContext MakeContext() => new(_connect);
+
+	#region Convert SQL Entities to Shared Entities
 
 	/// <summary>
 	/// A deep loaded User from the example database is converted into a Carbon full licence.
@@ -307,4 +324,6 @@ public partial class ExampleLicensingProvider : ILicensingProvider
 			Customers = includeChildren ? realm.Customers?.Select(c => ToCustomer(c, false)).ToArray() : null
 		};
 	}
+
+	#endregion
 }

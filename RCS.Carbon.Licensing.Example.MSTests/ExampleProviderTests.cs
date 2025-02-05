@@ -1,4 +1,5 @@
-﻿using System.Linq;
+﻿using System;
+using System.Linq;
 using System.Text.Json;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Configuration;
@@ -12,6 +13,8 @@ namespace RCS.Carbon.Licensing.Example.MSTests;
 public class ExampleProviderTests : TestBase
 {
 	const string GuestId = "10000335";
+	const string TestUserName = "gfkeogh@gmail.com";
+	const string TestUserPass = "qwe_123";
 	const string GuestPass = "guest";
 	const string Client1CustName = "client1rcs";
 	const string Client1DemoName = "demo";
@@ -21,7 +24,7 @@ public class ExampleProviderTests : TestBase
 	public async Task T040_Realms()
 	{
 		var prov = MakeProvider();
-		LicenceFull? licfull = await prov.LoginName("gfkeogh@gmail.com", "qwe123");
+		LicenceFull? licfull = await prov.LoginName(TestUserName, TestUserPass);
 		Assert.IsTrue(licfull.Realms.Length == 0);
 
 		licfull = await prov.LoginName("demo1@testusers.com", "demo123");
@@ -39,14 +42,14 @@ public class ExampleProviderTests : TestBase
 	public async Task T100_Authenticate()
 	{
 		var prov = MakeProvider();
-		LicenceFull? licfull = await prov.LoginName("gfkeogh@gmail.com", "qwe123");
+		LicenceFull? licfull = await prov.LoginName(TestUserName, TestUserPass);
 		Info($"LoginName -> {licfull.Id} | {licfull.Name}");
 		foreach (var cust in licfull.Customers)
 		{
 			Info($"|  CUST {cust.Id} | {cust.Name} | {cust.DisplayName}");
 			foreach (var job in cust.Jobs)
 			{
-				string vtrs = string.Format("[{0}]", string.Join(',', job.VartreeNames));
+				string? vtrs = job.VartreeNames == null ? null : string.Format("[{0}]", string.Join(',', job.VartreeNames));
 				string? reals = job.RealCloudVartreeNames == null ? null : string.Format("[{0}]", string.Join(',', job.RealCloudVartreeNames));
 				Info($"|  |  JOB {job.Id} | {job.Name} | {job.DisplayName} • {vtrs} • {reals}");
 			}
@@ -56,10 +59,28 @@ public class ExampleProviderTests : TestBase
 	}
 
 	[TestMethod]
+	public async Task T200_UpdateAccount()
+	{
+		var prov = MakeProvider();
+		LicenceFull? licfull = await prov.LoginName(TestUserName, TestUserPass);
+		Info($"LoginName -> {licfull.Id} | {licfull.Name}");
+		string comment = $"Updated on {DateTime.Now}";
+		int ucount = await prov.UpdateAccount(licfull.Id, "GregKeogh", comment, "greg@orthogonal.com.au");
+		Info($"Update count -> {ucount}");
+		var user = await prov.ReadUser(licfull.Id);
+		Assert.AreEqual("GregKeogh", user.Name);
+		Assert.AreEqual(comment, user.Comment);
+		Assert.AreEqual("greg@orthogonal.com.au", user.Email);
+
+		int count = await prov.ReturnId(licfull.Id);
+		Info($"Return count -> {count}");
+	}
+
+	[TestMethod]
 	public async Task T400_Connect_Story()
 	{
 		var prov = MakeProvider();
-		LicenceFull? licfull = await prov.LoginName("gfkeogh@gmail.com", "qwe123");
+		LicenceFull? licfull = await prov.LoginName(TestUserName, TestUserPass);
 		Info($"LoginName -> {licfull.Id} | {licfull.Name}");
 
 		const string Realm1Name = "TempTestRealm1";
