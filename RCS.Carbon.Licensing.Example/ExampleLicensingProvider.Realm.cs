@@ -46,16 +46,18 @@ partial class ExampleLicensingProvider
 		Realm row;
 		if (realm.Id == null)
 		{
-			int[] oldids = await context.Realms.Select(r => r.Id).ToArrayAsync().ConfigureAwait(false);
-			int randid;
-			do
+			int? newid = null;
+			while (newid == null)
 			{
-				randid = Random.Shared.Next(70_000_000, 80_000_000);
+				int tryid = Random.Shared.Next(70_000_000, 80_000_000);
+				if (!await context.Realms.AnyAsync(r => r.Id == tryid).ConfigureAwait(false))
+				{
+					newid = tryid;
+				}
 			}
-			while (oldids.Any(x => x == randid));
 			row = new Realm
 			{
-				Id = randid,
+				Id = newid.Value,
 				Created = DateTime.UtcNow
 			};
 			context.Realms.Add(row);

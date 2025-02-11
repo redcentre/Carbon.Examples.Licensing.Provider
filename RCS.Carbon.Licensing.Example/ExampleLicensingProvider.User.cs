@@ -92,32 +92,27 @@ partial class ExampleLicensingProvider
 		{
 			// A null Id on the incoming User has special meaning and indicates
 			// we are creating a new User. The Id cannot be manually specified.
-			Guid uid = Guid.NewGuid();
-			int[] oldids = await context.Users.Select(u => u.Id).ToArrayAsync().ConfigureAwait(false);
-			int randid;
-			do
+			int? newid = null;
+			while (newid == null)
 			{
-				randid = Random.Shared.Next(10_000_000, 20_000_000);
+				int tryid = Random.Shared.Next(10_000_000, 20_000_000);
+				if (!await context.Users.AnyAsync(u => u.Id == tryid).ConfigureAwait(false))
+				{
+					newid = tryid;
+				}
 			}
-			while (oldids.Any(x => x == randid));
 			row = new User
 			{
-				Id = randid,
-				Uid = uid,
-				Psw = null,     // The plaintext password might be needed for legacy usage, but avoid like the plague.
-				PassHash = user.PassHash ?? HP(user.Psw, uid),
+				Id = newid.Value,
+				Uid = Guid.NewGuid(),
 				Created = DateTime.UtcNow
 			};
 			context.Users.Add(row);
 		}
 		else
 		{
-			int uid = int.Parse(user.Id);
-			row = await context.Users.FirstAsync(u => u.Id == uid) ?? throw new ExampleLicensingException(LicensingErrorType.IdentityNotFound, $"User Id {user.Id} not found for update");
-			if (row.Uid == Guid.Empty)
-			{
-				row.Uid = Guid.NewGuid();
-			}
+			int numid = int.Parse(user.Id);
+			row = await context.Users.FirstAsync(u => u.Id == numid) ?? throw new ExampleLicensingException(LicensingErrorType.IdentityNotFound, $"User Id {user.Id} not found for update");
 		}
 		row.Name = user.Name;
 		row.ProviderId = user.ProviderId;

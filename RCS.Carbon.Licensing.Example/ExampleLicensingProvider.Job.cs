@@ -75,36 +75,27 @@ partial class ExampleLicensingProvider
 		Job row;
 		if (job.Id == null)
 		{
+			int? newid = null;
+			while (newid == null)
+			{
+				int tryid = Random.Shared.Next(20_000_000, 30_000_000);
+				if (!await context.Jobs.AnyAsync(j => j.Id == tryid).ConfigureAwait(false))
+				{
+					newid = tryid;
+				}
+			}
 			row = new Job
 			{
-				Id = Random.Shared.Next(20_000_000, 30_000_000),
+				Id = newid.Value,
 				Created = DateTime.UtcNow
 			};
 			context.Jobs.Add(row);
-			//// Ensure a container for the job in the parent customer storage account.
-			//if (job.CustomerId != null)
-			//{
-			//	int custid = int.Parse(job.CustomerId);
-			//	var cust = await context.Customers.AsNoTracking().FirstOrDefaultAsync(c => c.Id == custid).ConfigureAwait(false);
-			//	if (cust != null)
-			//	{
-			//		try
-			//		{
-			//			var client = new BlobServiceClient(cust.StorageKey);
-			//			var cc = client.GetBlobContainerClient(job.Name);
-			//			Azure.Response<BlobContainerInfo> resp = await cc.CreateIfNotExistsAsync().ConfigureAwait(false);
-			//			Trace.WriteLine($"Create container '{job.Name}' in customer '{cust.Name}' - {resp?.Value.ETag}");
-			//		}
-			//		catch (Exception ex)
-			//		{
-			//			Trace.WriteLine($"Failed to create container '{job.Name}' in customer '{cust.Name}' - {ex.Message}");
-			//		}
-			//	}
-			//}
+			// We could create a container for the job here, but the responsibility that
+			// is unclear and for now is in the hands of the parent app (such as DNA or the web service).
 		}
 		else
 		{
-			row = await context.Jobs.FirstOrDefaultAsync(j => j.Id.ToString() == job.Id) ?? throw new ExampleLicensingException(LicensingErrorType.CustomerNotFound, $"Customer Id {job.Id} not found for update");
+			row = await context.Jobs.FirstOrDefaultAsync(j => j.Id.ToString() == job.Id) ?? throw new ExampleLicensingException(LicensingErrorType.CustomerNotFound, $"Job Id {job.Id} not found for update");
 		}
 		row.Name = job.Name;
 		row.DataLocation = (int?)job.DataLocation;

@@ -92,14 +92,9 @@ partial class ExampleLicensingProvider
 	/// <remarks>
 	/// <para>
 	/// This method should have been called UpsertCustomer because it can insert or update a customer.
-	/// If the Id if the <paramref name="customer"/> parameter is <c>null</c> then a new customer will be created with a new unique Id and
-	/// default values for some other properties. If a customer with the Id exists then it will be updating with the incoming values.
-	/// An error is thrown if an attempt is made to update a customer that does not exist.
-	/// </para>
-	/// <para>
-	/// If the Subscription, Tenant, App and Secret Ids were specified when the provider was constructed, then creating a new customer
-	/// will also create an Azure Storage Account to be associated with the new customer. The connection string for the new account will
-	/// be stored in the <see cref="Shared.Entities.Customer.StorageKey"/> property of the new customer and returned.
+	/// If the Id if the <paramref name="customer"/> parameter is <c>null</c> then a new customer will be created with a new unique Id.
+	/// If a customer with the Id exists then it will be updated with the incoming values.
+	/// An error is thrown if an attempt is made to update a customer with an Id that does not exist.
 	/// </para>
 	/// </remarks>
 	/// <exception cref="ExampleLicensingException">Thrown if an attempt is made to update an existing customer Id that does not exist.</exception>
@@ -125,6 +120,8 @@ partial class ExampleLicensingProvider
 				Created = DateTime.UtcNow
 			};
 			context.Customers.Add(row);
+			// We could create an Azure Storage Account and Realm for the new customer here, but that
+			// responsibility currently lies with the parent app (such as DNA or the web service).
 		}
 		else
 		{
