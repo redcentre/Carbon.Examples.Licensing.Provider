@@ -103,16 +103,17 @@ partial class ExampleLicensingProvider
 
 	public async Task<Shared.Entities.Realm?> DisconnectRealmChildUser(string realmId, string userId)
 	{
-		Log($"DisconnectRealmChildUser({realmId},{userId})");
+		Log($"D DisconnectRealmChildUser({realmId},{userId})");
 		int id = int.Parse(realmId);
 		using var context = MakeContext();
-		var realm = await context.Realms.Include(r => r.Users).FirstOrDefaultAsync(r => r.Id == id);
+		var realm = await context.Realms.Include(r => r.Users).FirstOrDefaultAsync(r => r.Id == id).ConfigureAwait(false);
 		if (realm == null) return null;
 		int uid = int.Parse(userId);
-		var cust = realm.Users.FirstOrDefault(u => u.Id == uid);
-		if (cust != null)
+		var user = realm.Users.FirstOrDefault(u => u.Id == uid);
+		if (user != null)
 		{
-			realm.Users.Remove(cust);
+			Log($"I DisconnectRealmChildUser | Realm {realm.Id} {realm.Name} DEL User {user.Id} {user.Name}");
+			realm.Users.Remove(user);
 		}
 		await context.SaveChangesAsync().ConfigureAwait(false);
 		return await RereadRealm(context, id);
@@ -120,7 +121,7 @@ partial class ExampleLicensingProvider
 
 	public async Task<Shared.Entities.Realm?> ConnectRealmChildUsers(string realmId, string[] userIds)
 	{
-		Log($"ConnectRealmChildUsers({realmId},{Join(userIds)})");
+		Log($"D ConnectRealmChildUsers({realmId},{Join(userIds)})");
 		int id = int.Parse(realmId);
 		using var context = MakeContext();
 		var realm = await context.Realms.Include(r => r.Users).FirstOrDefaultAsync(r => r.Id == id).ConfigureAwait(false);
@@ -131,7 +132,7 @@ partial class ExampleLicensingProvider
 		User[] addusers = await context.Users.Where(u => adduids.Contains(u.Id)).ToArrayAsync().ConfigureAwait(false);
 		foreach (var adduser in addusers)
 		{
-			Log($"ConnectRealmChildUsers | Realm {realm.Id} {realm.Name} ADD User {adduser.Id} {adduser.Name}");
+			Log($"I ConnectRealmChildUsers | Realm {realm.Id} {realm.Name} ADD User {adduser.Id} {adduser.Name}");
 			realm.Users.Add(adduser);
 		}
 		await context.SaveChangesAsync().ConfigureAwait(false);
@@ -140,7 +141,7 @@ partial class ExampleLicensingProvider
 
 	public async Task<Shared.Entities.Realm?> ReplaceRealmChildUsers(string realmId, string[] userIds)
 	{
-		Log($"ReplaceRealmChildUsers({realmId},{Join(userIds)})");
+		Log($"D ReplaceRealmChildUsers({realmId},{Join(userIds)})");
 		int id = int.Parse(realmId);
 		using var context = MakeContext();
 		var realm = await context.Realms.Include(r => r.Users).FirstOrDefaultAsync(r => r.Id == id).ConfigureAwait(false);
@@ -150,7 +151,7 @@ partial class ExampleLicensingProvider
 		realm.Users.Clear();
 		foreach (var adduser in addusers)
 		{
-			Log($"ReplaceRealmChildUsers | Realm {realm.Id} {realm.Name} ADD User {adduser.Id} {adduser.Name}");
+			Log($"I ReplaceRealmChildUsers | Realm {realm.Id} {realm.Name} ADD User {adduser.Id} {adduser.Name}");
 			realm.Users.Add(adduser);
 		}
 		await context.SaveChangesAsync().ConfigureAwait(false);
@@ -159,6 +160,7 @@ partial class ExampleLicensingProvider
 
 	public async Task<Shared.Entities.Realm?> DisconnectRealmChildCustomer(string realmId, string customerId)
 	{
+		Log($"D DisconnectRealmChildCustomer({realmId},{customerId})");
 		int id = int.Parse(realmId);
 		using var context = MakeContext();
 		var realm = await context.Realms.Include(r => r.Customers).FirstOrDefaultAsync(r => r.Id.ToString() == realmId).ConfigureAwait(false);
@@ -167,6 +169,7 @@ partial class ExampleLicensingProvider
 		var cust = realm.Customers.FirstOrDefault(c => c.Id == cid);
 		if (cust != null)
 		{
+			Log($"I DisconnectRealmChildUser | Realm {realm.Id} {realm.Name} DEL Customer {cust.Id} {cust.Name}");
 			realm.Customers.Remove(cust);
 		}
 		await context.SaveChangesAsync().ConfigureAwait(false);
@@ -175,14 +178,18 @@ partial class ExampleLicensingProvider
 
 	public async Task<Shared.Entities.Realm?> ConnectRealmChildCustomers(string realmId, string[] customerIds)
 	{
+		Log($"D ConnectRealmChildCustomers({realmId},{Join(customerIds)})");
 		int id = int.Parse(realmId);
 		using var context = MakeContext();
 		var realm = await context.Realms.Include(r => r.Customers).FirstOrDefaultAsync(r => r.Id == id).ConfigureAwait(false);
 		if (realm == null) return null;
 		int[] cids = customerIds.Select(c => int.Parse(c)).ToArray();
-		var addcusts = await context.Customers.Where(c => cids.Contains(c.Id)).ToArrayAsync().ConfigureAwait(false);
+		int[] gotcids = realm.Customers.Select(c => c.Id).ToArray();
+		int[] addcids = cids.Except(gotcids).ToArray();
+		var addcusts = await context.Customers.Where(c => addcids.Contains(c.Id)).ToArrayAsync().ConfigureAwait(false);
 		foreach (var addcust in addcusts)
 		{
+			Log($"I ConnectRealmChildCustomers | Realm {realm.Id} {realm.Name} ADD Customer {addcust.Id} {addcust.Name}");
 			realm.Customers.Add(addcust);
 		}
 		await context.SaveChangesAsync().ConfigureAwait(false);

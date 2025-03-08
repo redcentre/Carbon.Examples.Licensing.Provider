@@ -54,6 +54,8 @@ public partial class ExampleLicensingProvider : ILicensingProvider
 		_applicationSecret = applicationSecret;
 	}
 
+	public event EventHandler<string>? ProviderLog;
+
 	public string Name
 	{
 		get
@@ -88,11 +90,9 @@ public partial class ExampleLicensingProvider : ILicensingProvider
 		}
 	}
 
-	bool HasIds => _subscriptionId != null && _tenantId != null && _applicationId != null && _applicationSecret != null;
+	void Log(string message) => ProviderLog?.Invoke(this, message);
 
-	void Log(string message) => Trace.WriteLine($"\u25a0 {DateTime.Now:HH:mm:ss.fff} [{Environment.CurrentManagedThreadId}] {message}");
-
-	static string Join(params object[] values) => values == null ? "NULL" : "[" + string.Join(",", values) + "]";
+	static string Join(params object[]? values) => values == null ? "NULL" : "[" + string.Join(",", values) + "]";
 
 	ExampleContext MakeContext() => new(_connect);
 
