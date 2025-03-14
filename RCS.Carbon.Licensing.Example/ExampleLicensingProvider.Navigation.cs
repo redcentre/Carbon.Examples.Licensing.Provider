@@ -85,16 +85,28 @@ partial class ExampleLicensingProvider
 	{
 		using var context = MakeContext();
 		var list = new List<ReportItem>();
-		var custs = await context.Customers.AsNoTracking().Include(c => c.Jobs).Where(c => c.Jobs.Count == 0).ToArrayAsync();
+		var custs = context.Customers.AsNoTracking().Include(c => c.Jobs).Where(c => c.Jobs.Count == 0);
 		foreach (var cust in custs)
 		{
-			list.Add(new ReportItem(1, cust.Id.ToString(), null, null, $"Customer '{cust.Name}' has no jobs"));
+			list.Add(new ReportItem(0, cust.Id.ToString(), null, null, $"Customer '{cust.Name}' has no jobs"));
 		}
-		var users = await context.Users.AsNoTracking().Include(u => u.Customers).Include(u => u.Jobs).Where(u => u.Customers.Count == 0 && u.Jobs.Count == 0).ToArrayAsync();
+		var users = context.Users.AsNoTracking().Include(u => u.Customers).Include(u => u.Jobs).Where(u => u.Customers.Count == 0 && u.Jobs.Count == 0);
 		foreach (var user in users)
 		{
-			list.Add(new ReportItem(2, null, null, user.Id.ToString(), $"User '{user.Name}' has no customers or jobs"));
+			list.Add(new ReportItem(0, null, null, user.Id.ToString(), $"User '{user.Name}' has no customers or jobs"));
 		}
-		return list.ToArray();
+		var custs2 = context.Customers.AsNoTracking().Include(c => c.Users).Include(c => c.Jobs).ThenInclude(j => j.Users);
+		foreach (var cust2 in custs2)
+		{
+			int[] juserids = cust2.Jobs.SelectMany(j => j.Users.Select(u => u.Id)).ToArray();
+			int[] cuserids = cust2.Users.Select(u => u.Id).ToArray();
+			int[] uiddups = juserids.Intersect(cuserids).ToArray();
+			foreach (var uiddup in uiddups)
+			{
+				var user = cust2.Users.Single(u => u.Id == uiddup);
+				list.Add(new ReportItem(1, cust2.Id.ToString(), null, uiddup.ToString(), $"Customer '{cust2.Name}' User '{user.Name}' has multiple connections"));
+			}
+		}
+		return await Task.FromResult(list.ToArray());
 	}
 }

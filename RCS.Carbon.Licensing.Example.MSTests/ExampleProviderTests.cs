@@ -24,10 +24,10 @@ public class ExampleProviderTests : TestBase
 	public async Task T040_Realms()
 	{
 		var prov = MakeProvider();
-		LicenceFull? licfull = await prov.LoginName(TestUserName, TestUserPass);
+		LicenceFull? licfull = await prov.AuthenticateName(TestUserName, TestUserPass);
 		Assert.IsTrue(licfull.Realms.Length == 0);
 
-		licfull = await prov.LoginName("demo1@testusers.com", "demo123");
+		licfull = await prov.AuthenticateName("demo1@testusers.com", "demo123");
 		//PrintJson(licfull);
 		Assert.IsTrue(licfull.Realms.Length == 1);
 
@@ -42,7 +42,7 @@ public class ExampleProviderTests : TestBase
 	public async Task T100_Authenticate()
 	{
 		var prov = MakeProvider();
-		LicenceFull? licfull = await prov.LoginName(TestUserName, TestUserPass);
+		LicenceFull? licfull = await prov.AuthenticateName(TestUserName, TestUserPass);
 		Info($"LoginName -> {licfull.Id} | {licfull.Name}");
 		foreach (var cust in licfull.Customers)
 		{
@@ -54,15 +54,13 @@ public class ExampleProviderTests : TestBase
 				Info($"|  |  JOB {job.Id} | {job.Name} | {job.DisplayName} • {vtrs} • {reals}");
 			}
 		}
-		int count = await prov.ReturnId(licfull.Id);
-		Info($"Return count -> {count}");
 	}
 
 	[TestMethod]
 	public async Task T200_UpdateAccount()
 	{
 		var prov = MakeProvider();
-		LicenceFull? licfull = await prov.LoginName(TestUserName, TestUserPass);
+		LicenceFull? licfull = await prov.AuthenticateName(TestUserName, TestUserPass);
 		Info($"LoginName -> {licfull.Id} | {licfull.Name}");
 		string comment = $"Updated on {DateTime.Now}";
 		int ucount = await prov.UpdateAccount(licfull.Id, "GregKeogh", comment, "greg@orthogonal.com.au");
@@ -71,16 +69,13 @@ public class ExampleProviderTests : TestBase
 		Assert.AreEqual("GregKeogh", user.Name);
 		Assert.AreEqual(comment, user.Comment);
 		Assert.AreEqual("greg@orthogonal.com.au", user.Email);
-
-		int count = await prov.ReturnId(licfull.Id);
-		Info($"Return count -> {count}");
 	}
 
 	[TestMethod]
 	public async Task T400_Connect_Story()
 	{
 		var prov = MakeProvider();
-		LicenceFull? licfull = await prov.LoginName(TestUserName, TestUserPass);
+		LicenceFull? licfull = await prov.AuthenticateName(TestUserName, TestUserPass);
 		Info($"LoginName -> {licfull.Id} | {licfull.Name}");
 
 		const string Realm1Name = "TempTestRealm1";
@@ -129,9 +124,6 @@ public class ExampleProviderTests : TestBase
 		await prov.ConnectUserChildRealms(uid1, new string[] { rid1 });
 		//await prov.ReplaceUserChildRealms(uid1, new string[] { rid1 });
 		//await prov.ConnectRealmChildUsers(rid1, new string[] { uid1 });
-
-		int count = await prov.ReturnId(licfull.Id);
-		Info($"Return count -> {count}");
 	}
 
 	ILicensingProvider MakeProvider()

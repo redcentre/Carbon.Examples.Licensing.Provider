@@ -14,7 +14,7 @@ partial class ExampleLicensingProvider
 
 	static long GetId(string userId) => long.TryParse(userId, out long id) ? id : throw new ExampleLicensingException(LicensingErrorType.IdentityBadFormat, $"User Id '{userId}' is not in the correct format");
 
-	public async Task<LicenceFull> LoginId(string userId, string? password, bool skipCache = false)
+	public async Task<LicenceFull> AuthenticateId(string userId, string? password, bool skipCache = false)
 	{
 		using var context = MakeContext();
 		long id = GetId(userId);
@@ -30,7 +30,7 @@ partial class ExampleLicensingProvider
 		return await UserToFull(user);
 	}
 
-	public async Task<LicenceFull> LoginName(string userName, string? password, bool skipCache = false)
+	public async Task<LicenceFull> AuthenticateName(string userName, string? password, bool skipCache = false)
 	{
 		string upname = userName.ToUpper();
 		using var context = MakeContext();
