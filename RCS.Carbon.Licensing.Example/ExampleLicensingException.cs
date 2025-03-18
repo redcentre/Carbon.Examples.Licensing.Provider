@@ -1,5 +1,4 @@
 ﻿using System;
-using System.Runtime.Serialization;
 
 namespace RCS.Carbon.Licensing.Example;
 
@@ -28,18 +27,6 @@ public sealed class ExampleLicensingException : ApplicationException
 		: base(message, innerException)
 	{
 		ErrorType = errorType;
-	}
-
-	private ExampleLicensingException(SerializationInfo info, StreamingContext context)
-		: base(info, context)
-	{
-		ErrorType = (LicensingErrorType)info.GetValue(nameof(ErrorType), typeof(LicensingErrorType));
-	}
-
-	public override void GetObjectData(SerializationInfo info, StreamingContext context)
-	{
-		info.AddValue(nameof(ErrorType), ErrorType);
-		base.GetObjectData(info, context);
 	}
 
 	public LicensingErrorType ErrorType { get; private set; }

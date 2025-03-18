@@ -23,7 +23,14 @@ partial class ExampleLicensingProvider
 			.Include(u => u.Jobs).ThenInclude(j => j.Customer)
 			.Include(u => u.Realms)
 			.FirstOrDefaultAsync(u => u.Id == id) ?? throw new ExampleLicensingException(LicensingErrorType.IdentityNotFound, $"User Id '{userId}' does not exist");
-		if (user.Psw != null & user.Psw != password) throw new ExampleLicensingException(LicensingErrorType.PasswordIncorrect, $"User Id '{userId}' incorrect password");
+		if (user.PassHash != null)
+		{
+			// If user's password hash is null, then it's the rare and possibly invalid
+			// situation where a user does not have a password and can authenticate without one.
+			// Normally the hash will be present and it must be compared to the hash of the incoming password.
+			byte[] inhash = HP(password ?? "", user.Uid)!;
+			if (!inhash.SequenceEqual(user.PassHash)) throw new ExampleLicensingException(LicensingErrorType.PasswordIncorrect, $"User Id '{userId}' incorrect password");
+		}
 		user.LoginCount = user.LoginCount ?? 1;
 		user.LastLogin = DateTime.UtcNow;
 		await context.SaveChangesAsync().ConfigureAwait(false);
@@ -39,7 +46,11 @@ partial class ExampleLicensingProvider
 			.Include(u => u.Jobs).ThenInclude(j => j.Customer)
 			.Include(u => u.Realms)
 			.FirstOrDefaultAsync(u => u.Name.ToUpper() == upname) ?? throw new ExampleLicensingException(LicensingErrorType.IdentityNotFound, $"User Name '{userName}' does not exist");
-		if (user.Psw != null & user.Psw != password) throw new ExampleLicensingException(LicensingErrorType.PasswordIncorrect, $"User Name '{userName}' incorrect password");
+		if (user.PassHash != null)
+		{
+			byte[] inhash = HP(password ?? "", user.Uid)!;
+			if (!inhash.SequenceEqual(user.PassHash)) throw new ExampleLicensingException(LicensingErrorType.PasswordIncorrect, $"User Name '{userName}' incorrect password");
+		}
 		user.LoginCount = user.LoginCount ?? 1;
 		user.LastLogin = DateTime.UtcNow;
 		await context.SaveChangesAsync().ConfigureAwait(false);
@@ -56,7 +67,7 @@ partial class ExampleLicensingProvider
 		user.LoginCount = user.LoginCount == null ? 1 : user.LoginCount + 1;
 		user.LastLogin = DateTime.UtcNow;
 		await context.SaveChangesAsync().ConfigureAwait(false);
-		return  await UserToFull(user);
+		return await UserToFull(user);
 	}
 
 	public async Task<int> LogoutId(string userId)
@@ -76,8 +87,16 @@ partial class ExampleLicensingProvider
 		using var context = MakeContext();
 		long id = GetId(userId);
 		var user = await context.Users.FirstOrDefaultAsync(u => u.Id == id).ConfigureAwait(false) ?? throw new ExampleLicensingException(LicensingErrorType.IdentityNotFound, $"User Id '{userId}' does not exist");
-		if (user.Psw != null && user.Psw != oldPassword) throw new ExampleLicensingException(LicensingErrorType.PasswordIncorrect, $"User Id '{userId}' incorrect old password");
-		user.Psw = newPassword;
+		if (oldPassword != null)
+		{
+			// If an old password is specified then its hash must match the user's record hash.
+			// Not specifying and old password causes the password to be replaced without verification.
+			// The plaintext password is no longer persisted anywhere for modern safety reasons.
+			byte[] inhash = HP(oldPassword, user.Uid)!;
+			if (!inhash.SequenceEqual(user.PassHash)) throw new ExampleLicensingException(LicensingErrorType.PasswordIncorrect, $"User Id '{userId}' incorrect old password");
+		}
+		user.PassHash = HP(newPassword, user.Uid);
+		user.Psw = null;
 		return await context.SaveChangesAsync().ConfigureAwait(false);
 	}
 

@@ -280,7 +280,7 @@ public partial class ExampleLicensingProvider : ILicensingProvider
 			Id = user.Id.ToString(),
 			Name = user.Name,
 			ProviderId = user.ProviderId,
-			Psw = user.Psw,
+			//Psw = user.Psw,		// This value is no longer round-tripped
 			PassHash = user.PassHash,
 			Email = user.Email,
 			EntityId = user.EntityId,

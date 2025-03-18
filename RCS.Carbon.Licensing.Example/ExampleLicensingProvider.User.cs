@@ -115,8 +115,19 @@ partial class ExampleLicensingProvider
 		}
 		row.Name = user.Name;
 		row.ProviderId = user.ProviderId;
-		row.Psw = user.Psw;
-		row.PassHash = HP(user.Psw, row.Uid);
+		if (user.Psw != null)
+		{
+			// ┌───────────────────────────────────────────────────────────────┐
+			// │  If the incoming password is specified then it's expected to  │
+			// │  be a request to change the password. In this case a fresh    │
+			// │  hash is calculated. Note that the plaintext password is no   │
+			// │  longer saved in the User record, only the hash, to conform   │
+			// │  to modern safety conventions. At some point, all the plain   │
+			// │  passwords in all User records will be erased.                │
+			// └───────────────────────────────────────────────────────────────┘
+			//row.Psw = user.Psw;
+			row.PassHash = HP(user.Psw, row.Uid);
+		}
 		row.Email = user.Email;
 		row.EntityId = user.EntityId;
 		row.CloudCustomerNames = user.CloudCustomerNames?.Length > 0 ? string.Join(" ", user.CloudCustomerNames) : null;
@@ -346,7 +357,7 @@ partial class ExampleLicensingProvider
 		return ToUser(cust, true);
 	}
 
-	static byte[]? HP(string p, Guid u)
+	static byte[]? HP(string? p, Guid u)
 	{
 		if (p == null) return null;
 		using var deriver = new Rfc2898DeriveBytes(p, u.ToByteArray(), 15000, HashAlgorithmName.SHA1);
