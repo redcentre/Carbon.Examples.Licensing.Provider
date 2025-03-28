@@ -1,0 +1,7 @@
+<Solution>
+  <Folder Name="/Solution Items/">
+    <File Path="RCS.Carbon.Licensing.Example.snk" />
+  </Folder>
+  <Project Path="RCS.Carbon.Licensing.Example.MSTests/RCS.Carbon.Licensing.Example.MSTests.csproj" />
+  <Project Path="RCS.Carbon.Licensing.Example/RCS.Carbon.Licensing.Example.csproj" />
+</Solution>
