@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
@@ -31,7 +31,7 @@ partial class ExampleLicensingProvider
 			byte[] inhash = HP(password ?? "", user.Uid)!;
 			if (!inhash.SequenceEqual(user.PassHash)) throw new ExampleLicensingException(LicensingErrorType.PasswordIncorrect, $"User Id '{userId}' incorrect password");
 		}
-		user.LoginCount = user.LoginCount ?? 1;
+		user.LoginCount ??= 1;
 		user.LastLogin = DateTime.UtcNow;
 		await context.SaveChangesAsync().ConfigureAwait(false);
 		return await UserToFull(user);
@@ -51,7 +51,7 @@ partial class ExampleLicensingProvider
 			byte[] inhash = HP(password ?? "", user.Uid)!;
 			if (!inhash.SequenceEqual(user.PassHash)) throw new ExampleLicensingException(LicensingErrorType.PasswordIncorrect, $"User Name '{userName}' incorrect password");
 		}
-		user.LoginCount = user.LoginCount ?? 1;
+		user.LoginCount ??= 1;
 		user.LastLogin = DateTime.UtcNow;
 		await context.SaveChangesAsync().ConfigureAwait(false);
 		return await UserToFull(user);
@@ -68,18 +68,6 @@ partial class ExampleLicensingProvider
 		user.LastLogin = DateTime.UtcNow;
 		await context.SaveChangesAsync().ConfigureAwait(false);
 		return await UserToFull(user);
-	}
-
-	public async Task<int> LogoutId(string userId)
-	{
-		// Reserved for future use
-		return await Task.FromResult(-1);
-	}
-
-	public async Task<int> ReturnId(string userId)
-	{
-		// Reserved for future use
-		return await Task.FromResult(-1);
 	}
 
 	public async Task<int> ChangePassword(string userId, string? oldPassword, string newPassword)

@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
@@ -40,7 +40,7 @@ partial class ExampleLicensingProvider
 		return realms.Select(r => ToRealm(r, false)!).ToArray();
 	}
 
-	public async Task<Shared.Entities.Realm> UpdateRealm(Shared.Entities.Realm realm)
+	public async Task<Shared.Entities.Realm?> UpdateRealm(Shared.Entities.Realm realm)
 	{
 		using var context = MakeContext();
 		Realm row;

@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
@@ -69,7 +69,7 @@ partial class ExampleLicensingProvider
 		return await Task.FromResult(empty);
 	}
 
-	public async Task<Shared.Entities.Job> UpdateJob(Shared.Entities.Job job)
+	public async Task<Shared.Entities.Job?> UpdateJob(Shared.Entities.Job job)
 	{
 		using var context = MakeContext();
 		Job row;

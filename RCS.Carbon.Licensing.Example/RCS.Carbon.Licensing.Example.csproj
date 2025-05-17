@@ -1,8 +1,8 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <Version>9.1.19</Version>
-    <InformationalVersion>2025-04-22 17:35 GMT+10</InformationalVersion>
+    <Version>9.1.23</Version>
+    <InformationalVersion>2025-05-18 09:03 GMT+10</InformationalVersion>
     <TargetFrameworks>net6.0;net8.0</TargetFrameworks>
     <Authors>Red Centre Software</Authors>
     <Company>Red Centre Software</Company>
@@ -15,6 +15,7 @@
     <PackageReleaseNotes>Example code by Red Centre Software https://github.com/redcentre/Carbon.Examples.Licensing.Provider/</PackageReleaseNotes>
     <PackageOutputPath>S:\Nuget\redcentre</PackageOutputPath>
     <PackageReadmeFile>README.md</PackageReadmeFile>
+    <NoWarn>IDE0301;IDE0305</NoWarn>
   </PropertyGroup>
 
   <PropertyGroup>
@@ -35,7 +36,7 @@
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
-    <PackageReference Include="RCS.Carbon.Licensing.Shared" Version="9.1.19" />
+    <PackageReference Include="RCS.Carbon.Licensing.Shared" Version="9.1.23" />
     <PackageReference Include="System.Linq.Async" Version="6.0.1" />
   </ItemGroup>
 

@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using Azure.Storage.Blobs;
 using Microsoft.EntityFrameworkCore;
 using RCS.Carbon.Licensing.Example.EFCore;
+using SE = RCS.Carbon.Licensing.Shared.Entities;
 
 #nullable enable
 
@@ -13,7 +14,7 @@ namespace RCS.Carbon.Licensing.Example;
 
 partial class ExampleLicensingProvider
 {
-	public async Task<Shared.Entities.Customer?> ReadCustomer(string id)
+	public async Task<SE.Customer?> ReadCustomer(string id)
 	{
 		using var context = MakeContext();
 		var cust = await context.Customers.AsNoTracking()
@@ -25,7 +26,7 @@ partial class ExampleLicensingProvider
 		return ToCustomer(cust, true);
 	}
 
-	public async Task<Shared.Entities.Customer[]> ReadCustomersByName(string customerName)
+	public async Task<SE.Customer[]> ReadCustomersByName(string customerName)
 	{
 		using var context = MakeContext();
 		return await context.Customers.AsNoTracking()
@@ -39,7 +40,7 @@ partial class ExampleLicensingProvider
 			.ConfigureAwait(false);
 	}
 
-	public async Task<Shared.Entities.Customer[]> ListCustomers()
+	public async Task<SE.Customer[]> ListCustomers()
 	{
 		using var context = MakeContext();
 		return await context.Customers.AsNoTracking()
@@ -49,7 +50,7 @@ partial class ExampleLicensingProvider
 			.ConfigureAwait(false);
 	}
 
-	public async Task<Shared.Entities.Customer[]> ListCustomers(params string[] realmIds)
+	public async Task<SE.Customer[]> ListCustomers(params string[]? realmIds)
 	{
 		int[] rids = realmIds?.Select(x => int.Parse(x)).ToArray() ?? Array.Empty<int>();
 		using var context = MakeContext();
@@ -62,7 +63,7 @@ partial class ExampleLicensingProvider
 			.ConfigureAwait(false);
 	}
 
-	public async Task<Shared.Entities.CustomerPick[]> ListCustomerPicksForRealms(params string[] realmIds)
+	public async Task<SE.CustomerPick[]> ListCustomerPicksForRealms(params string[]? realmIds)
 	{
 		int[] rids = realmIds?.Select(x => int.Parse(x)).ToArray() ?? Array.Empty<int>();
 		using var context = MakeContext();
@@ -72,11 +73,11 @@ partial class ExampleLicensingProvider
 			.Include(c => c.Realms)
 			.Where(c => rids.Length == 0 || c.Realms.Any(r => rids.Contains(r.Id)))
 			.AsAsyncEnumerable()
-			.Select(c => new Shared.Entities.CustomerPick(c.Id.ToString(), c.Name)
+			.Select(c => new SE.CustomerPick(c.Id.ToString(), c.Name)
 			{
 				IsInactive = c.Inactive,
 				DisplayName = c.DisplayName,
-				Jobs = c.Jobs.Select(j => new Shared.Entities.JobPick(j.Id.ToString(), j.Name)
+				Jobs = c.Jobs.Select(j => new SE.JobPick(j.Id.ToString(), j.Name)
 				{
 					DisplayName = j.DisplayName,
 					IsInactive = j.Inactive
@@ -98,7 +99,7 @@ partial class ExampleLicensingProvider
 	/// </para>
 	/// </remarks>
 	/// <exception cref="ExampleLicensingException">Thrown if an attempt is made to update an existing customer Id that does not exist.</exception>
-	public async Task<Shared.Entities.Customer> UpdateCustomer(Shared.Entities.Customer customer)
+	public async Task<SE.Customer?> UpdateCustomer(SE.Customer customer)
 	{
 		using var context = MakeContext();
 		Customer row;
@@ -200,13 +201,13 @@ partial class ExampleLicensingProvider
 		return await context.SaveChangesAsync().ConfigureAwait(false);
 	}
 
-	public Task<Shared.Entities.Customer?> ConnectCustomerChildJobs(string customerId, string[] jobIds) => throw new Exception($"Changing customer and job relationships is not permitted after they have been created.");
+	public Task<SE.Customer?> ConnectCustomerChildJobs(string customerId, string[] jobIds) => throw new Exception($"Changing customer and job relationships is not permitted after they have been created.");
 
-	public Task<Shared.Entities.Customer?> DisconnectCustomerChildJob(string customerId, string jobId) => throw new Exception($"Changing customer and job relationships is not permitted after they have been created.");
+	public Task<SE.Customer?> DisconnectCustomerChildJob(string customerId, string jobId) => throw new Exception($"Changing customer and job relationships is not permitted after they have been created.");
 
-	public Task<Shared.Entities.Customer> ReplaceCustomerChildJobs(string customerId, string[] jobIds) => throw new Exception($"Changing customer and job relationships is not permitted after they have been created.");
+	public Task<SE.Customer?> ReplaceCustomerChildJobs(string customerId, string[] jobIds) => throw new Exception($"Changing customer and job relationships is not permitted after they have been created.");
 
-	public async Task<Shared.Entities.Customer?> DisconnectCustomerChildUser(string customerId, string userId)
+	public async Task<SE.Customer?> DisconnectCustomerChildUser(string customerId, string userId)
 	{
 		Log($"D DisconnectCustomerChildUser({customerId},{userId})");
 		int id = int.Parse(customerId);
@@ -223,7 +224,7 @@ partial class ExampleLicensingProvider
 		return await RereadCustomer(context, id).ConfigureAwait(false);
 	}
 
-	public async Task<Shared.Entities.Customer?> ConnectCustomerChildUsers(string customerId, string[] userIds)
+	public async Task<SE.Customer?> ConnectCustomerChildUsers(string customerId, string[] userIds)
 	{
 		Log($"D ConnectCustomerChildUsers({customerId},{Join(userIds)})");
 		int cid = int.Parse(customerId);
@@ -243,7 +244,7 @@ partial class ExampleLicensingProvider
 		return await RereadCustomer(context, cid).ConfigureAwait(false);
 	}
 
-	public async Task<Shared.Entities.Customer?> ReplaceCustomerChildUsers(string customerId, string[] userIds)
+	public async Task<SE.Customer?> ReplaceCustomerChildUsers(string customerId, string[] userIds)
 	{
 		Log($"D ReplaceCustomerChildUsers({customerId},{Join(userIds)})");
 		int cid = int.Parse(customerId);
@@ -262,7 +263,7 @@ partial class ExampleLicensingProvider
 		return await RereadCustomer(context, cid).ConfigureAwait(false);
 	}
 
-	static async Task<Shared.Entities.Customer?> RereadCustomer(ExampleContext context, int customerId)
+	static async Task<SE.Customer?> RereadCustomer(ExampleContext context, int customerId)
 	{
 		var cust = await context.Customers.AsNoTracking().Include(c => c.Users).Include(c => c.Jobs).FirstOrDefaultAsync(c => c.Id == customerId).ConfigureAwait(false);
 		return ToCustomer(cust, true);

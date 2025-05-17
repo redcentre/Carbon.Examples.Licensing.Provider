@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Linq;
 using System.Security.Cryptography;
 using System.Threading.Tasks;
@@ -49,7 +49,7 @@ partial class ExampleLicensingProvider
 		return users.Select(u => ToUser(u, false)!).ToArray();
 	}
 
-	public async Task<Shared.Entities.User[]> ListUsers(params string[] realmIds)
+	public async Task<Shared.Entities.User[]> ListUsers(params string[]? realmIds)
 	{
 		int[] rids = realmIds?.Select(x => int.Parse(x)).ToArray() ?? Array.Empty<int>();
 		using var context = MakeContext();
@@ -63,7 +63,7 @@ partial class ExampleLicensingProvider
 			.ConfigureAwait(false);
 	}
 
-	public async Task<Shared.Entities.UserPick[]> ListUserPicksForRealms(params string[] realmIds)
+	public async Task<Shared.Entities.UserPick[]> ListUserPicksForRealms(params string[]? realmIds)
 	{
 		int[] rids = realmIds?.Select(x => int.Parse(x)).ToArray() ?? Array.Empty<int>();
 		using var context = MakeContext();
@@ -83,7 +83,7 @@ partial class ExampleLicensingProvider
 			.ConfigureAwait(false);
 	}
 
-	public async Task<Shared.Entities.User> UpdateUser(Shared.Entities.User user)
+	public async Task<Shared.Entities.User?> UpdateUser(Shared.Entities.User user)
 	{
 		using var context = MakeContext();
 		User row;
