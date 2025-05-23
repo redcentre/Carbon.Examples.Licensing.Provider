@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Diagnostics;
@@ -23,7 +23,6 @@ namespace RCS.Carbon.Licensing.Example;
 /// </summary>
 public partial class ExampleLicensingProvider : ILicensingProvider
 {
-	readonly string _prodkey;
 	readonly string _connect;
 	readonly string? _subscriptionId;
 	readonly string? _tenantId;
@@ -36,7 +35,6 @@ public partial class ExampleLicensingProvider : ILicensingProvider
 	/// create, modify and delete Azure Storage Accounts which correspond to licensing customers.
 	/// See the notes on <see cref="UpdateCustomer(Shared.Entities.Customer)"/> for more information.
 	/// </summary>
-	/// <param name="productKey">The product key must be provided by Red Centre Software [support@redcentresoftware.com].</param>
 	/// <param name="adoConnectionString">ADO.NET connections string to the SQL server database containing the licensing information.</param>
 	/// <param name="subscriptionId">Optional Azure Subscription Id displayed in the Azure portal.</param>
 	/// <param name="tenantId">Optional Azure Tenant Id displayed in the Azure portal.</param>
@@ -44,9 +42,8 @@ public partial class ExampleLicensingProvider : ILicensingProvider
 	/// privileges to create, modify and delete Storage accounts (which correspond to licnsing cusgomers).</param>
 	/// <param name="applicationSecret">Optional Application Secret (aka 'password') created in the Azure portal and associated with the <paramref name="applicationId"/></param>
 	/// <exception cref="ArgumentNullException">Thrown if the <paramref name="productKey"/> or <paramref name="adoConnectionString"/> are null.</exception>
-	public ExampleLicensingProvider(string productKey, string adoConnectionString, string? subscriptionId = null, string? tenantId = null, string? applicationId = null, string? applicationSecret = null)
+	public ExampleLicensingProvider(string adoConnectionString, string? subscriptionId = null, string? tenantId = null, string? applicationId = null, string? applicationSecret = null)
 	{
-		_prodkey = productKey ?? throw new ArgumentNullException(nameof(productKey));
 		_connect = adoConnectionString ?? throw new ArgumentNullException(nameof(adoConnectionString));
 		_subscriptionId = subscriptionId;
 		_tenantId = tenantId;
@@ -86,7 +83,7 @@ public partial class ExampleLicensingProvider : ILicensingProvider
 			string server = m.Success ? m.Groups[1].Value : "(SERVER?)";
 			m = Regex.Match(_connect, "(?:database|initial catalog)=([^;]+)", RegexOptions.IgnoreCase);
 			string database = m.Success ? m.Groups[1].Value : "(DATABASE?)";
-			return $"{server};{database};{_prodkey}";
+			return $"{server};{database}";
 		}
 	}
 
@@ -135,7 +132,8 @@ public partial class ExampleLicensingProvider : ILicensingProvider
 			EntityType = null,
 			Recovered = null,
 			GuestJobs = null,
-			ProductKey = _prodkey,      // This value can be set by the parent service, it's not part of the licensing database.
+			ProductKey = null,
+			LicenceSignature = null,
 			Roles = user.Roles?.Split(",; ".ToArray()),
 			Realms = user.Realms.Select(r => new LicenceRealm() { Id = r.Id.ToString(), Name = r.Name, Inactive = r.Inactive, Policy = r.Policy }).ToArray(),
 			Customers = custs.Select(c => new LicenceCustomer()
